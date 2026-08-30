@@ -17,7 +17,8 @@ import {
   Download,
   DownloadCloud,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  Database
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -37,6 +38,7 @@ interface HeaderProps {
   onToggleMute: () => void;
   canInstallPwa: boolean;
   onInstallPwa: () => void;
+  onOpenCarto: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -56,6 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleMute,
   canInstallPwa,
   onInstallPwa,
+  onOpenCarto,
 }) => {
   return (
     <header
@@ -160,6 +163,20 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden sm:inline">Install PWA</span>
           </button>
         )}
+
+        {/* CARTO Data Warehouse API Hub */}
+        <button
+          id="open-carto-hub-btn"
+          onClick={() => {
+            soundFx.playClick();
+            onOpenCarto();
+          }}
+          title="CARTO Data Warehouse & Cloud Workflow Hub"
+          className="p-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition-colors flex items-center gap-1.5 text-xs font-mono"
+        >
+          <Database className="w-4 h-4 text-cyan-400" />
+          <span className="hidden xl:inline">CARTO DW</span>
+        </button>
 
         {/* Research Paper Assumptions Reference */}
         <button

@@ -11,6 +11,7 @@ import { ScenarioControlModal } from './components/ScenarioControlModal';
 import { AlertNotificationCenter } from './components/AlertNotificationCenter';
 import { AssumptionsModal } from './components/AssumptionsModal';
 import { ExportTelemetryModal } from './components/ExportTelemetryModal';
+import { CartoModal } from './components/CartoModal';
 
 export default function App() {
   const [buses, setBuses] = useState<BusVehicle[]>([]);
@@ -33,6 +34,7 @@ export default function App() {
   const [isAssumptionsOpen, setIsAssumptionsOpen] = useState<boolean>(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState<boolean>(false);
   const [isExportOpen, setIsExportOpen] = useState<boolean>(false);
+  const [isCartoOpen, setIsCartoOpen] = useState<boolean>(false);
 
   // PWA Install Prompt
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -142,6 +144,7 @@ export default function App() {
         onToggleMute={() => setIsMuted((prev) => !prev)}
         canInstallPwa={canInstallPwa}
         onInstallPwa={handleInstallPwa}
+        onOpenCarto={() => setIsCartoOpen(true)}
       />
 
       {/* Main Operator Dashboard Workspace */}
@@ -174,6 +177,7 @@ export default function App() {
               setShowDeadzones={setShowDeadzones}
               showRoutes={showRoutes}
               setShowRoutes={setShowRoutes}
+              onOpenCartoModal={() => setIsCartoOpen(true)}
             />
           </div>
         </div>
@@ -244,6 +248,13 @@ export default function App() {
         onClose={() => setIsExportOpen(false)}
         buses={buses}
         alerts={alerts}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* CARTO Data Warehouse API Hub Modal */}
+      <CartoModal
+        isOpen={isCartoOpen}
+        onClose={() => setIsCartoOpen(false)}
         isDarkMode={isDarkMode}
       />
     </div>

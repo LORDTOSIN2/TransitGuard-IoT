@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { BusVehicle, BaseStationHub, TransitRoute } from '../types/fleet';
 import { TRANSIT_ROUTES, BASE_STATIONS } from '../data/mockRoutes';
 import { soundFx } from '../utils/audio';
+import { CARTO_TILE_STYLES, TileStyle, cartoService } from '../services/cartoService';
 import { 
   Radio, 
   Wifi, 
@@ -12,7 +13,11 @@ import {
   Layers, 
   Eye, 
   EyeOff,
-  Maximize2
+  Maximize2,
+  Database,
+  Map as MapIcon,
+  CheckCircle2,
+  RefreshCw
 } from 'lucide-react';
 
 interface MapViewProps {
@@ -26,6 +31,7 @@ interface MapViewProps {
   setShowDeadzones: (show: boolean) => void;
   showRoutes: boolean;
   setShowRoutes: (show: boolean) => void;
+  onOpenCartoModal?: () => void;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -39,6 +45,7 @@ export const MapView: React.FC<MapViewProps> = ({
   setShowDeadzones,
   showRoutes,
   setShowRoutes,
+  onOpenCartoModal,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -49,6 +56,12 @@ export const MapView: React.FC<MapViewProps> = ({
   const deadzonesGroupRef = useRef<L.LayerGroup | null>(null);
   const routesGroupRef = useRef<L.LayerGroup | null>(null);
 
+  // Basemap Tile style state: Default to CARTO Voyager for high-detail streets or CARTO Dark
+  const [selectedTileId, setSelectedTileId] = useState<string>(isDarkMode ? 'carto-dark' : 'carto-voyager');
+  const [isStyleMenuOpen, setIsStyleMenuOpen] = useState<boolean>(false);
+  const [isCartoSyncing, setIsCartoSyncing] = useState<boolean>(false);
+  const [cartoSyncSuccess, setCartoSyncSuccess] = useState<boolean | null>(null);
+
   // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
@@ -58,20 +71,19 @@ export const MapView: React.FC<MapViewProps> = ({
       center: [9.582, 6.545],
       zoom: 12,
       zoomControl: false,
-      attributionControl: false,
+      attributionControl: true,
     });
 
     // Add custom positioned zoom controls
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Dark vs Light tile layer
-    const tileUrl = isDarkMode
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    const availableStyles = cartoService.getTileStyles();
+    const initialStyle = availableStyles.find(s => s.id === selectedTileId) || availableStyles[0];
 
-    const tiles = L.tileLayer(tileUrl, {
-      maxZoom: 19,
-      subdomains: 'abcd',
+    const tiles = L.tileLayer(initialStyle.url, {
+      maxZoom: initialStyle.maxZoom,
+      subdomains: initialStyle.subdomains || 'abc',
+      attribution: initialStyle.attribution,
     }).addTo(map);
 
     tileLayerRef.current = tiles;
@@ -126,14 +138,36 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, []);
 
-  // Update tile theme when mode changes
-  useEffect(() => {
+  // Update tile theme when style changes
+  const handleSelectTileStyle = (styleId: string) => {
+    setSelectedTileId(styleId);
+    setIsStyleMenuOpen(false);
+    soundFx.playClick();
+
     if (!mapInstanceRef.current || !tileLayerRef.current) return;
-    const tileUrl = isDarkMode
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-    tileLayerRef.current.setUrl(tileUrl);
-  }, [isDarkMode]);
+    const availableStyles = cartoService.getTileStyles();
+    const style = availableStyles.find(s => s.id === styleId);
+    if (style) {
+      tileLayerRef.current.setUrl(style.url);
+    }
+  };
+
+  // Trigger quick CARTO DW Sync
+  const handleQuickCartoSync = async () => {
+    setIsCartoSyncing(true);
+    soundFx.playClick();
+    const res = await cartoService.executeWorkflow();
+    setIsCartoSyncing(false);
+    setCartoSyncSuccess(res.success);
+    if (res.success) {
+      soundFx.playSuccess();
+    } else {
+      soundFx.playCautionAlert();
+    }
+    setTimeout(() => {
+      setCartoSyncSuccess(null);
+    }, 4000);
+  };
 
   // Render Routes
   useEffect(() => {
@@ -374,21 +408,65 @@ export const MapView: React.FC<MapViewProps> = ({
     mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
   };
 
+  const availableTileStyles = cartoService.getTileStyles();
+  const activeTileStyle = availableTileStyles.find(s => s.id === selectedTileId) || availableTileStyles[0];
+
   return (
     <div id="map-view-container" className="relative w-full h-full min-h-[460px] overflow-hidden rounded-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] bg-[#080A0F]">
       {/* Leaflet map DOM node */}
       <div ref={mapContainerRef} className="w-full h-full" />
 
-      {/* Floating Map HUD Layer Controls */}
+      {/* Floating Map HUD Controls */}
       <div className="absolute top-4 left-4 z-[400] flex flex-col gap-2">
         <div className={`glass-panel rounded-xl p-2 flex flex-wrap items-center gap-1.5 border ${
           isDarkMode ? 'border-white/15 text-[#E0E6ED]' : 'glass-panel-light text-slate-800'
         }`}>
-          <div className="text-[11px] font-mono font-semibold px-2 text-blue-400 flex items-center gap-1">
-            <Layers className="w-3.5 h-3.5" />
-            <span>LAYERS</span>
+          {/* Tile Style Selector Dropdown Trigger */}
+          <div className="relative">
+            <button
+              id="map-style-selector-btn"
+              onClick={() => setIsStyleMenuOpen(!isStyleMenuOpen)}
+              className="px-2.5 py-1 text-xs rounded-lg font-mono flex items-center gap-1.5 bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30 transition-all"
+              title="Change Map Style (CARTO Voyager/Dark/OSM/Satellite)"
+            >
+              <MapIcon className="w-3.5 h-3.5 text-blue-400" />
+              <span className="font-semibold">{activeTileStyle.name.split(' ')[0]} {activeTileStyle.name.split(' ')[1]}</span>
+            </button>
+
+            {/* Tile Style Dropdown Menu */}
+            {isStyleMenuOpen && (
+              <div className={`absolute top-full left-0 mt-2 w-64 rounded-xl border shadow-2xl p-2 z-[500] space-y-1 font-mono text-xs ${
+                isDarkMode ? 'bg-[#0b1120] border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-900'
+              }`}>
+                <div className="text-[10px] text-slate-400 uppercase tracking-wider px-2 py-1 font-semibold">
+                  Map Basemap Layer
+                </div>
+                {availableTileStyles.map((style) => (
+                  <button
+                    key={style.id}
+                    onClick={() => handleSelectTileStyle(style.id)}
+                    className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors flex items-center justify-between ${
+                      selectedTileId === style.id
+                        ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
+                        : 'hover:bg-white/5 text-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: style.previewColor }}></span>
+                        <span>{style.name}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 line-clamp-1">{style.description}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
+          <div className="h-4 w-px bg-white/10 mx-0.5" />
+
+          {/* Layer toggles */}
           <button
             id="toggle-mesh-lines-btn"
             onClick={() => {
@@ -446,6 +524,48 @@ export const MapView: React.FC<MapViewProps> = ({
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
         </div>
+      </div>
+
+      {/* Top Right: CARTO BigQuery Hub Trigger */}
+      <div className="absolute top-4 right-4 z-[400] flex items-center gap-2">
+        <button
+          id="quick-carto-sync-btn"
+          onClick={handleQuickCartoSync}
+          disabled={isCartoSyncing}
+          className={`glass-panel px-3 py-1.5 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 transition-all ${
+            cartoSyncSuccess === true
+              ? 'border-emerald-500/50 text-emerald-300 bg-emerald-950/40'
+              : cartoSyncSuccess === false
+              ? 'border-rose-500/50 text-rose-300 bg-rose-950/40'
+              : isDarkMode 
+              ? 'border-cyan-500/30 text-cyan-300 hover:border-cyan-400 bg-cyan-950/20 hover:bg-cyan-950/40' 
+              : 'glass-panel-light text-cyan-700 border-cyan-400'
+          }`}
+          title="Run CARTO DW Workflow Procedure"
+        >
+          {isCartoSyncing ? (
+            <RefreshCw className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+          ) : cartoSyncSuccess === true ? (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          ) : (
+            <Database className="w-3.5 h-3.5 text-cyan-400" />
+          )}
+          <span>{isCartoSyncing ? 'Running...' : cartoSyncSuccess === true ? 'CARTO Synced' : 'CARTO Sync'}</span>
+        </button>
+
+        {onOpenCartoModal && (
+          <button
+            id="open-carto-settings-btn"
+            onClick={() => {
+              soundFx.playClick();
+              onOpenCartoModal();
+            }}
+            className="glass-panel p-1.5 rounded-xl border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20 transition-colors"
+            title="Configure CARTO API & Queries"
+          >
+            <Database className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Floating Mini Legend HUD */}
