@@ -1,0 +1,6 @@
+{
+  "name": "TransitGuard IoT Fleet & Fatigue Dashboard",
+  "description": "Real-time operator dashboard and alert interface for low-power IoT public transport tracking, multi-hub LoRa/GSM communication resilience, and MediaPipe driver fatigue monitoring.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

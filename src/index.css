@@ -1,0 +1,167 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Chakra Petch', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Inter', sans-serif;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #05070A;
+    color: #E0E6ED;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Typography Utility */
+.font-display {
+  font-family: 'Chakra Petch', sans-serif;
+}
+
+.font-mono-code {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Frosted Glass Theme Classes */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-panel-subtle {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-light {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+}
+
+.glass-glow-blue {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.35);
+}
+
+.glass-glow-cyan {
+  box-shadow: 0 0 18px rgba(6, 182, 212, 0.35);
+}
+
+.glass-glow-rose {
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.4);
+}
+
+.glass-glow-amber {
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.4);
+}
+
+.glass-glow-emerald {
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.35);
+}
+
+/* Background Frosted Radial Dot Matrix */
+.bg-frosted-dots {
+  background-color: #05070A;
+  background-image: radial-gradient(rgba(59, 130, 246, 0.18) 0.75px, transparent 0.75px);
+  background-size: 24px 24px;
+}
+
+.bg-frosted-dots-light {
+  background-color: #f1f5f9;
+  background-image: radial-gradient(rgba(59, 130, 246, 0.15) 0.75px, transparent 0.75px);
+  background-size: 24px 24px;
+}
+
+/* Custom Glass Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.5);
+}
+
+/* Leaflet Map Customization for Frosted Glass */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #080A0F !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+.leaflet-dark-tiles {
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(205deg) saturate(0.35) brightness(0.7);
+}
+
+.leaflet-light-tiles {
+  filter: saturate(0.9) brightness(1.02);
+}
+
+/* Custom Marker CSS Animations */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0.2;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+.marker-pulse {
+  animation: pulse-ring 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+}
+
+@keyframes radar-sweep {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.radar-sweep-anim {
+  animation: radar-sweep 4s linear infinite;
+  transform-origin: center center;
+}
+
+/* Leaflet Popups with Glassmorphism */
+.leaflet-popup-content-wrapper {
+  background: rgba(12, 17, 26, 0.88) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  color: #E0E6ED !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6) !important;
+  border-radius: 12px !important;
+  padding: 0 !important;
+}
+
+.leaflet-popup-tip {
+  background: rgba(12, 17, 26, 0.88) !important;
+}
