@@ -1,23 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { BusVehicle, BaseStationHub, TransitRoute } from '../types/fleet';
+import { BusVehicle } from '../types/fleet';
 import { TRANSIT_ROUTES, BASE_STATIONS } from '../data/mockRoutes';
 import { soundFx } from '../utils/audio';
-import { CARTO_TILE_STYLES, TileStyle, cartoService } from '../services/cartoService';
+import { cartoService } from '../services/cartoService';
 import { 
   Radio, 
-  Wifi, 
   AlertTriangle, 
-  MapPin, 
   Navigation, 
-  Layers, 
-  Eye, 
-  EyeOff,
   Maximize2,
   Database,
   Map as MapIcon,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  Layers
 } from 'lucide-react';
 
 interface MapViewProps {
@@ -56,11 +52,25 @@ export const MapView: React.FC<MapViewProps> = ({
   const deadzonesGroupRef = useRef<L.LayerGroup | null>(null);
   const routesGroupRef = useRef<L.LayerGroup | null>(null);
 
-  // Basemap Tile style state: Default to CARTO Voyager for high-detail streets or CARTO Dark
+  // Basemap Tile style state: Default to CARTO Voyager for high-detail streets in light mode or CARTO Dark in dark mode
   const [selectedTileId, setSelectedTileId] = useState<string>(isDarkMode ? 'carto-dark' : 'carto-voyager');
   const [isStyleMenuOpen, setIsStyleMenuOpen] = useState<boolean>(false);
   const [isCartoSyncing, setIsCartoSyncing] = useState<boolean>(false);
   const [cartoSyncSuccess, setCartoSyncSuccess] = useState<boolean | null>(null);
+
+  // Synchronize tile layer automatically when Dark/Light mode is toggled
+  useEffect(() => {
+    const targetStyleId = isDarkMode ? 'carto-dark' : 'carto-voyager';
+    setSelectedTileId(targetStyleId);
+
+    if (mapInstanceRef.current && tileLayerRef.current) {
+      const styles = cartoService.getTileStyles();
+      const style = styles.find(s => s.id === targetStyleId) || styles[0];
+      if (style) {
+        tileLayerRef.current.setUrl(style.url);
+      }
+    }
+  }, [isDarkMode]);
 
   // Initialize Map
   useEffect(() => {
@@ -78,7 +88,8 @@ export const MapView: React.FC<MapViewProps> = ({
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     const availableStyles = cartoService.getTileStyles();
-    const initialStyle = availableStyles.find(s => s.id === selectedTileId) || availableStyles[0];
+    const initialStyleId = isDarkMode ? 'carto-dark' : 'carto-voyager';
+    const initialStyle = availableStyles.find(s => s.id === initialStyleId) || availableStyles[0];
 
     const tiles = L.tileLayer(initialStyle.url, {
       maxZoom: initialStyle.maxZoom,
@@ -122,7 +133,7 @@ export const MapView: React.FC<MapViewProps> = ({
             </div>
             <div class="text-slate-400 mb-0.5">Type: <span class="text-slate-200">${hub.type}</span></div>
             <div class="text-slate-400">Coordinates: <span class="text-cyan-300 font-mono">${hub.location.lat.toFixed(4)}°N, ${hub.location.lng.toFixed(4)}°E</span></div>
-            <div class="mt-2 text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+            <div class="mt-2 text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-semibold">
               Active Relay Node Ready
             </div>
           </div>
@@ -138,7 +149,7 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, []);
 
-  // Update tile theme when style changes
+  // Update tile theme when user manually selects style
   const handleSelectTileStyle = (styleId: string) => {
     setSelectedTileId(styleId);
     setIsStyleMenuOpen(false);
@@ -178,19 +189,21 @@ export const MapView: React.FC<MapViewProps> = ({
       TRANSIT_ROUTES.forEach((route) => {
         const latLngs = route.waypoints.map((wp) => [wp.lat, wp.lng] as [number, number]);
         const polyline = L.polyline(latLngs, {
-          color: route.color,
-          weight: 3.5,
-          opacity: 0.7,
+          color: isDarkMode ? route.color : '#0284c7', // Sky Blue in light mode
+          weight: 4,
+          opacity: 0.85,
           dashArray: '8, 8',
           lineCap: 'round',
         }).bindTooltip(`${route.name} (${route.lengthKm} km)`, {
           sticky: true,
-          className: 'bg-slate-900 text-cyan-300 text-xs border border-cyan-500/40 rounded px-2 py-1',
+          className: isDarkMode 
+            ? 'bg-slate-900 text-cyan-300 text-xs border border-cyan-500/40 rounded px-2 py-1'
+            : 'bg-white text-blue-900 font-bold text-xs border border-blue-300 shadow-md rounded px-2 py-1',
         });
         routesGroupRef.current?.addLayer(polyline);
       });
     }
-  }, [showRoutes]);
+  }, [showRoutes, isDarkMode]);
 
   // Render Cellular Dead-zones
   useEffect(() => {
@@ -202,22 +215,22 @@ export const MapView: React.FC<MapViewProps> = ({
         route.deadzones.forEach((dz) => {
           const circle = L.circle([dz.center.lat, dz.center.lng], {
             radius: dz.radiusMeters,
-            color: '#f43f5e', // Rose
-            weight: 1.5,
+            color: '#e11d48', // Vibrant Rose
+            weight: 2,
             dashArray: '6, 6',
-            fillColor: '#f43f5e',
-            fillOpacity: 0.12,
+            fillColor: '#e11d48',
+            fillOpacity: isDarkMode ? 0.15 : 0.18,
           }).bindTooltip(`
             <div class="text-xs font-mono p-1">
-              <strong class="text-rose-400 block">${dz.name}</strong>
-              <span class="text-slate-300">GSM Coverage: ${dz.gsmCoveragePercent}% | LoRa Rescue Active</span>
+              <strong class="text-rose-600 block font-bold">${dz.name}</strong>
+              <span class="${isDarkMode ? 'text-slate-300' : 'text-slate-700'}">GSM Coverage: ${dz.gsmCoveragePercent}% | LoRa Rescue Active</span>
             </div>
           `, { sticky: true });
           deadzonesGroupRef.current?.addLayer(circle);
         });
       });
     }
-  }, [showDeadzones]);
+  }, [showDeadzones, isDarkMode]);
 
   // Render & Update Bus Markers & LoRa Mesh Lines
   useEffect(() => {
@@ -249,19 +262,19 @@ export const MapView: React.FC<MapViewProps> = ({
       // Status color
       let statusColor = '#10b981'; // Emerald
       let glowClass = 'shadow-emerald-500/50';
-      let ringColor = 'border-emerald-400';
+      let ringColor = 'border-emerald-500';
       if (isCritical) {
         statusColor = '#f43f5e'; // Rose
         glowClass = 'shadow-rose-500/80 animate-bounce';
-        ringColor = 'border-rose-400';
+        ringColor = 'border-rose-500';
       } else if (isDrowsy) {
         statusColor = '#f59e0b'; // Amber
         glowClass = 'shadow-amber-500/60';
-        ringColor = 'border-amber-400';
+        ringColor = 'border-amber-500';
       } else if (isRescued) {
         statusColor = '#06b6d4'; // Cyan
         glowClass = 'shadow-cyan-500/60';
-        ringColor = 'border-cyan-400';
+        ringColor = 'border-cyan-500';
       }
 
       // Marker HTML with directional heading arrow and status badge
@@ -270,7 +283,7 @@ export const MapView: React.FC<MapViewProps> = ({
           ${isCritical ? `<div class="absolute -inset-2 rounded-full bg-rose-500/30 marker-pulse"></div>` : ''}
           ${isRescued && !isCritical ? `<div class="absolute -inset-1.5 rounded-full bg-cyan-500/25 marker-pulse"></div>` : ''}
           
-          <div class="relative w-10 h-10 rounded-xl bg-slate-950/90 border-2 ${ringColor} flex flex-col items-center justify-center shadow-lg ${glowClass} backdrop-blur-sm">
+          <div class="relative w-10 h-10 rounded-xl bg-slate-950 border-2 ${ringColor} flex flex-col items-center justify-center shadow-lg ${glowClass} backdrop-blur-sm">
             <!-- Heading pointer -->
             <div class="absolute -top-2 transition-transform duration-300" style="transform: rotate(${bus.heading}deg);">
               <div class="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[7px]" style="border-bottom-color: ${statusColor}"></div>
@@ -389,17 +402,17 @@ export const MapView: React.FC<MapViewProps> = ({
               [nearestHub.location.lat, nearestHub.location.lng],
             ],
             {
-              color: '#38bdf8',
+              color: '#0284c7',
               weight: 2,
               dashArray: '4, 6',
-              opacity: 0.6,
+              opacity: 0.7,
             }
           );
           meshLinesGroupRef.current.addLayer(meshLine);
         }
       }
     });
-  }, [buses, selectedBusId, showMeshLines]);
+  }, [buses, selectedBusId, showMeshLines, isDarkMode]);
 
   const handleCenterFleet = () => {
     if (!mapInstanceRef.current || buses.length === 0) return;
@@ -412,31 +425,44 @@ export const MapView: React.FC<MapViewProps> = ({
   const activeTileStyle = availableTileStyles.find(s => s.id === selectedTileId) || availableTileStyles[0];
 
   return (
-    <div id="map-view-container" className="relative w-full h-full min-h-[460px] overflow-hidden rounded-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] bg-[#080A0F]">
+    <div
+      id="map-view-container"
+      className={`relative w-full h-full min-h-[460px] overflow-hidden rounded-2xl border transition-colors duration-300 ${
+        isDarkMode 
+          ? 'bg-[#080A0F] border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]' 
+          : 'bg-[#F1F5F9] border-slate-200 shadow-sm'
+      }`}
+    >
       {/* Leaflet map DOM node */}
       <div ref={mapContainerRef} className="w-full h-full" />
 
       {/* Floating Map HUD Controls */}
       <div className="absolute top-4 left-4 z-[400] flex flex-col gap-2">
-        <div className={`glass-panel rounded-xl p-2 flex flex-wrap items-center gap-1.5 border ${
-          isDarkMode ? 'border-white/15 text-[#E0E6ED]' : 'glass-panel-light text-slate-800'
+        <div className={`rounded-xl p-2 flex flex-wrap items-center gap-1.5 border transition-all ${
+          isDarkMode 
+            ? 'glass-panel border-white/15 text-[#E0E6ED]' 
+            : 'bg-white/95 backdrop-blur-md border-slate-200 text-slate-900 shadow-md'
         }`}>
           {/* Tile Style Selector Dropdown Trigger */}
           <div className="relative">
             <button
               id="map-style-selector-btn"
               onClick={() => setIsStyleMenuOpen(!isStyleMenuOpen)}
-              className="px-2.5 py-1 text-xs rounded-lg font-mono flex items-center gap-1.5 bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30 transition-all"
+              className={`px-2.5 py-1 text-xs rounded-lg font-mono flex items-center gap-1.5 transition-all ${
+                isDarkMode 
+                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30' 
+                  : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold shadow-xs'
+              }`}
               title="Change Map Style (CARTO Voyager/Dark/OSM/Satellite)"
             >
-              <MapIcon className="w-3.5 h-3.5 text-blue-400" />
+              <MapIcon className="w-3.5 h-3.5 text-blue-500" />
               <span className="font-semibold">{activeTileStyle.name.split(' ')[0]} {activeTileStyle.name.split(' ')[1]}</span>
             </button>
 
             {/* Tile Style Dropdown Menu */}
             {isStyleMenuOpen && (
               <div className={`absolute top-full left-0 mt-2 w-64 rounded-xl border shadow-2xl p-2 z-[500] space-y-1 font-mono text-xs ${
-                isDarkMode ? 'bg-[#0b1120] border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-900'
+                isDarkMode ? 'bg-[#0b1120] border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-900 shadow-xl'
               }`}>
                 <div className="text-[10px] text-slate-400 uppercase tracking-wider px-2 py-1 font-semibold">
                   Map Basemap Layer
@@ -447,8 +473,10 @@ export const MapView: React.FC<MapViewProps> = ({
                     onClick={() => handleSelectTileStyle(style.id)}
                     className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors flex items-center justify-between ${
                       selectedTileId === style.id
-                        ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
-                        : 'hover:bg-white/5 text-slate-300'
+                        ? isDarkMode 
+                          ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30' 
+                          : 'bg-blue-50 text-blue-700 font-bold border border-blue-200'
+                        : isDarkMode ? 'hover:bg-white/5 text-slate-300' : 'hover:bg-slate-100 text-slate-700'
                     }`}
                   >
                     <div>
@@ -464,7 +492,7 @@ export const MapView: React.FC<MapViewProps> = ({
             )}
           </div>
 
-          <div className="h-4 w-px bg-white/10 mx-0.5" />
+          <div className={`h-4 w-px mx-0.5 ${isDarkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
 
           {/* Layer toggles */}
           <button
@@ -475,11 +503,15 @@ export const MapView: React.FC<MapViewProps> = ({
             }}
             className={`px-2.5 py-1 text-xs rounded-lg font-mono flex items-center gap-1.5 transition-all ${
               showMeshLines
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
-                : 'bg-white/5 text-slate-400 hover:text-slate-200 border border-white/5 hover:bg-white/10'
+                ? isDarkMode
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
+                  : 'bg-purple-100 text-purple-800 border border-purple-300 shadow-xs font-bold'
+                : isDarkMode
+                ? 'bg-white/5 text-slate-400 hover:text-slate-200 border border-white/5 hover:bg-white/10'
+                : 'bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 hover:bg-slate-200 font-medium'
             }`}
           >
-            <Radio className="w-3 h-3 text-purple-400" />
+            <Radio className="w-3 h-3 text-purple-500" />
             <span>LoRa Mesh Links</span>
           </button>
 
@@ -491,11 +523,15 @@ export const MapView: React.FC<MapViewProps> = ({
             }}
             className={`px-2.5 py-1 text-xs rounded-lg font-mono flex items-center gap-1.5 transition-all ${
               showDeadzones
-                ? 'bg-red-500/20 text-red-300 border border-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.25)]'
-                : 'bg-white/5 text-slate-400 hover:text-slate-200 border border-white/5 hover:bg-white/10'
+                ? isDarkMode
+                  ? 'bg-red-500/20 text-red-300 border border-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.25)]'
+                  : 'bg-rose-100 text-rose-800 border border-rose-300 shadow-xs font-bold'
+                : isDarkMode
+                ? 'bg-white/5 text-slate-400 hover:text-slate-200 border border-white/5 hover:bg-white/10'
+                : 'bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 hover:bg-slate-200 font-medium'
             }`}
           >
-            <AlertTriangle className="w-3 h-3 text-red-400" />
+            <AlertTriangle className="w-3 h-3 text-rose-500" />
             <span>GSM Deadzones</span>
           </button>
 
@@ -507,11 +543,15 @@ export const MapView: React.FC<MapViewProps> = ({
             }}
             className={`px-2.5 py-1 text-xs rounded-lg font-mono flex items-center gap-1.5 transition-all ${
               showRoutes
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
-                : 'bg-white/5 text-slate-400 hover:text-slate-200 border border-white/5 hover:bg-white/10'
+                ? isDarkMode
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
+                  : 'bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs font-bold'
+                : isDarkMode
+                ? 'bg-white/5 text-slate-400 hover:text-slate-200 border border-white/5 hover:bg-white/10'
+                : 'bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 hover:bg-slate-200 font-medium'
             }`}
           >
-            <Navigation className="w-3 h-3 text-emerald-400" />
+            <Navigation className="w-3 h-3 text-emerald-500" />
             <span>Route Paths</span>
           </button>
 
@@ -519,7 +559,11 @@ export const MapView: React.FC<MapViewProps> = ({
             id="fit-fleet-bounds-btn"
             onClick={handleCenterFleet}
             title="Fit All Buses in View"
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white border border-white/10 transition-colors"
+            className={`p-1.5 rounded-lg border transition-colors ${
+              isDarkMode 
+                ? 'bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white border-white/10' 
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border-slate-200'
+            }`}
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
@@ -532,23 +576,23 @@ export const MapView: React.FC<MapViewProps> = ({
           id="quick-carto-sync-btn"
           onClick={handleQuickCartoSync}
           disabled={isCartoSyncing}
-          className={`glass-panel px-3 py-1.5 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 transition-all ${
+          className={`px-3 py-1.5 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 transition-all shadow-md ${
             cartoSyncSuccess === true
-              ? 'border-emerald-500/50 text-emerald-300 bg-emerald-950/40'
+              ? isDarkMode ? 'border-emerald-500/50 text-emerald-300 bg-emerald-950/40' : 'bg-emerald-100 text-emerald-900 border-emerald-300'
               : cartoSyncSuccess === false
-              ? 'border-rose-500/50 text-rose-300 bg-rose-950/40'
+              ? isDarkMode ? 'border-rose-500/50 text-rose-300 bg-rose-950/40' : 'bg-rose-100 text-rose-900 border-rose-300'
               : isDarkMode 
-              ? 'border-cyan-500/30 text-cyan-300 hover:border-cyan-400 bg-cyan-950/20 hover:bg-cyan-950/40' 
-              : 'glass-panel-light text-cyan-700 border-cyan-400'
+              ? 'glass-panel border-cyan-500/30 text-cyan-300 hover:border-cyan-400 bg-cyan-950/20 hover:bg-cyan-950/40' 
+              : 'bg-white/95 backdrop-blur-md text-cyan-800 border-cyan-300 hover:bg-cyan-50'
           }`}
           title="Run CARTO DW Workflow Procedure"
         >
           {isCartoSyncing ? (
-            <RefreshCw className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+            <RefreshCw className="w-3.5 h-3.5 text-cyan-500 animate-spin" />
           ) : cartoSyncSuccess === true ? (
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
           ) : (
-            <Database className="w-3.5 h-3.5 text-cyan-400" />
+            <Database className="w-3.5 h-3.5 text-cyan-500" />
           )}
           <span>{isCartoSyncing ? 'Running...' : cartoSyncSuccess === true ? 'CARTO Synced' : 'CARTO Sync'}</span>
         </button>
@@ -560,7 +604,11 @@ export const MapView: React.FC<MapViewProps> = ({
               soundFx.playClick();
               onOpenCartoModal();
             }}
-            className="glass-panel p-1.5 rounded-xl border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20 transition-colors"
+            className={`p-1.5 rounded-xl border transition-colors shadow-md ${
+              isDarkMode 
+                ? 'glass-panel border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-500/20' 
+                : 'bg-white/95 backdrop-blur-md border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:text-cyan-900'
+            }`}
             title="Configure CARTO API & Queries"
           >
             <Database className="w-4 h-4" />
@@ -570,26 +618,28 @@ export const MapView: React.FC<MapViewProps> = ({
 
       {/* Floating Mini Legend HUD */}
       <div className="absolute bottom-4 left-4 z-[400] hidden md:block">
-        <div className={`glass-panel rounded-xl p-3 text-[11px] font-mono border ${
-          isDarkMode ? 'border-white/15 text-[#E0E6ED]' : 'glass-panel-light text-slate-700'
+        <div className={`rounded-xl p-3 text-[11px] font-mono border transition-all ${
+          isDarkMode 
+            ? 'glass-panel border-white/15 text-[#E0E6ED]' 
+            : 'bg-white/95 backdrop-blur-md border-slate-200 text-slate-800 shadow-md'
         }`}>
           <div className="text-slate-400 font-semibold mb-1.5 uppercase text-[10px] tracking-wider">Fleet Telemetry Status</div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]"></span>
-              <span>Normal</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs"></span>
+              <span className="font-medium">Normal</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]"></span>
-              <span>Drowsy/Caution</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-xs"></span>
+              <span className="font-medium">Drowsy/Caution</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]"></span>
-              <span>Fatigue/Alcohol Alert</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shadow-xs"></span>
+              <span className="font-medium">Fatigue/Alcohol Alert</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-purple-400 border border-purple-300 shadow-[0_0_8px_rgba(192,132,252,0.5)]"></span>
-              <span>LoRa Rescued</span>
+              <span className="w-2.5 h-2.5 rounded-sm bg-purple-500 shadow-xs"></span>
+              <span className="font-medium">LoRa Rescued</span>
             </div>
           </div>
         </div>

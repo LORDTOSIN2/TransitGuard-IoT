@@ -186,25 +186,33 @@ export default function App() {
       {/* Bottom Frosted Operational Status Bar */}
       <footer
         id="frosted-status-bar"
-        className={`h-9 px-4 border-t flex items-center justify-between text-[11px] font-mono select-none ${
+        className={`h-9 px-4 border-t flex items-center justify-between text-[11px] font-mono select-none transition-colors duration-300 ${
           isDarkMode
             ? 'bg-black/40 backdrop-blur-md border-white/10 text-slate-400'
-            : 'bg-white/70 backdrop-blur-md border-slate-200 text-slate-600'
+            : 'bg-white/95 backdrop-blur-md border-slate-200 text-slate-600 shadow-xs'
         }`}
       >
         <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-emerald-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span className={`flex items-center gap-1.5 font-semibold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>
+            <span className={`w-2 h-2 rounded-full animate-ping ${isDarkMode ? 'bg-emerald-400' : 'bg-emerald-600'}`}></span>
             SYS NORMAL
           </span>
-          <span className="text-slate-600 hidden sm:inline">|</span>
-          <span className="hidden sm:inline">LoRa Store-and-Forward Mesh: <strong className="text-cyan-400">ONLINE</strong></span>
-          <span className="text-slate-600 hidden md:inline">|</span>
-          <span className="hidden md:inline">MediaPipe Vision Pipeline: <strong className="text-slate-200">30 FPS</strong></span>
+          <span className={isDarkMode ? 'text-slate-600 hidden sm:inline' : 'text-slate-300 hidden sm:inline'}>|</span>
+          <span className="hidden sm:inline">
+            LoRa Store-and-Forward Mesh: <strong className={isDarkMode ? 'text-cyan-400' : 'text-cyan-700 font-bold'}>ONLINE</strong>
+          </span>
+          <span className={isDarkMode ? 'text-slate-600 hidden md:inline' : 'text-slate-300 hidden md:inline'}>|</span>
+          <span className="hidden md:inline">
+            MediaPipe Vision Pipeline: <strong className={isDarkMode ? 'text-slate-200' : 'text-slate-800 font-bold'}>30 FPS</strong>
+          </span>
         </div>
         <div className="flex items-center gap-3 text-[10px]">
-          <span className="text-slate-500">PDR Target: 98.6%</span>
-          <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 font-semibold">
+          <span className={isDarkMode ? 'text-slate-500' : 'text-slate-600 font-medium'}>PDR Target: 98.6%</span>
+          <span className={`px-2 py-0.5 rounded font-semibold border ${
+            isDarkMode 
+              ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' 
+              : 'bg-blue-50 border-blue-200 text-blue-700'
+          }`}>
             FUT MINNA IOT-CORE
           </span>
         </div>
