@@ -122,9 +122,10 @@ export default function App() {
   return (
     <div
       id="transitguard-app-root"
-      className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${
+      className={`flex flex-col font-sans transition-colors duration-300 ${
         isDarkMode ? 'bg-[#05070A] text-[#E0E6ED] bg-frosted-dots' : 'bg-slate-100 text-slate-900 bg-frosted-dots-light'
       }`}
+      style={{ minHeight: '100dvh' }}
     >
       {/* Top Application Header & Live Simulation Toolbar */}
       <Header
@@ -165,7 +166,7 @@ export default function App() {
           />
 
           {/* Interactive Leaflet Map View */}
-          <div className="flex-1 flex flex-col min-h-[460px]">
+          <div className="flex-1 flex flex-col min-h-[460px] h-[520px] lg:h-auto">
             <MapView
               buses={buses}
               selectedBusId={selectedBusId}

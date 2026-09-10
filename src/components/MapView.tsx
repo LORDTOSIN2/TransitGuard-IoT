@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { BusVehicle } from '../types/fleet';
 import { TRANSIT_ROUTES, BASE_STATIONS } from '../data/mockRoutes';
@@ -105,6 +105,21 @@ export const MapView: React.FC<MapViewProps> = ({
     deadzonesGroupRef.current = L.layerGroup().addTo(map);
     meshLinesGroupRef.current = L.layerGroup().addTo(map);
 
+    // FIX 1: Force Leaflet to recalculate container size after React finishes
+    // layout. Critical on Android where flex layout settles after first paint.
+    const invalidateTimer = setTimeout(() => {
+      map.invalidateSize({ animate: false });
+    }, 300);
+
+    // FIX 2: Watch for ANY container resize (orientation change, sidebar open/close,
+    // Android Chrome toolbar show/hide) and tell Leaflet to recalculate.
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize({ animate: false });
+    });
+    if (mapContainerRef.current) {
+      resizeObserver.observe(mapContainerRef.current);
+    }
+
     // Render Base Station Hubs
     BASE_STATIONS.forEach((hub) => {
       const hubIconHtml = `
@@ -144,6 +159,8 @@ export const MapView: React.FC<MapViewProps> = ({
     });
 
     return () => {
+      clearTimeout(invalidateTimer);
+      resizeObserver.disconnect();
       map.remove();
       mapInstanceRef.current = null;
     };
@@ -427,14 +444,16 @@ export const MapView: React.FC<MapViewProps> = ({
   return (
     <div
       id="map-view-container"
-      className={`relative w-full h-full min-h-[460px] overflow-hidden rounded-2xl border transition-colors duration-300 ${
+      className={`relative w-full overflow-hidden rounded-2xl border transition-colors duration-300 ${
         isDarkMode 
           ? 'bg-[#080A0F] border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]' 
           : 'bg-[#F1F5F9] border-slate-200 shadow-sm'
       }`}
+      style={{ height: '100%', minHeight: '460px' }}
     >
-      {/* Leaflet map DOM node */}
-      <div ref={mapContainerRef} className="w-full h-full" />
+      {/* Leaflet map DOM node — absolutely positioned so it always fills container
+          regardless of how the parent flex layout resolves on mobile */}
+      <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
 
       {/* Floating Map HUD Controls */}
       <div className="absolute top-4 left-4 z-[400] flex flex-col gap-2">
