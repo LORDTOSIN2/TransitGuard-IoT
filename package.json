@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "server": "bun run server.ts",
+    "test:publisher": "python test_publisher.py",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
@@ -13,8 +15,12 @@
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@types/cors": "^2.8.19",
     "@types/leaflet": "^1.9.22",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.0.4",
+    "aedes": "^1.1.2",
+    "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "leaflet": "^1.9.4",
@@ -22,7 +28,8 @@
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -692,6 +692,184 @@ export class FleetSimulationEngine {
     };
     this.alerts = [newAlert, ...this.alerts.slice(0, 49)];
   }
+
+  /**
+   * Ingest a live telemetry payload from external MQTT or HTTP POST (bench-test / live RPi)
+   */
+  public ingestLiveTelemetry(payload: any) {
+    if (!payload || !payload.deviceId) return;
+
+    let bus = this.buses.find((b) => b.id === payload.deviceId);
+    if (!bus) {
+      // Create new bus vehicle representation
+      const route = TRANSIT_ROUTES[0];
+      const driver = MOCK_DRIVERS[0];
+      const newBus: BusVehicle = {
+        id: payload.deviceId,
+        plateNumber: `NG-MN-${payload.deviceId.replace(/\D/g, '') || '401'}`,
+        routeId: route.id,
+        routeName: route.name,
+        driverName: driver.name,
+        driverId: driver.id,
+        location: {
+          lat: payload.location?.lat ?? 9.5824,
+          lng: payload.location?.lng ?? 6.5458,
+        },
+        speed: payload.location?.speed ?? 0,
+        heading: payload.location?.heading ?? 0,
+        status: payload.biometrics?.driverState || 'NORMAL',
+        lastUpdated: payload.timestamp || Date.now(),
+        biometrics: {
+          ear: payload.biometrics?.ear ?? 0.32,
+          mar: payload.biometrics?.mar ?? 0.30,
+          perclos: payload.biometrics?.perclos ?? 4.0,
+          headPitch: payload.biometrics?.headPitch ?? 0,
+          headYaw: payload.biometrics?.headYaw ?? 0,
+          headRoll: payload.biometrics?.headRoll ?? 0,
+          alcoholRawADC: payload.biometrics?.alcoholRawADC ?? 115,
+          alcoholVoltage: payload.biometrics?.alcoholVoltage ?? 0.38,
+          alcoholRiskScore: payload.biometrics?.alcoholRiskScore ?? 0.04,
+          isYawning: (payload.biometrics?.mar ?? 0) > 0.60,
+          isNodding: (payload.biometrics?.headPitch ?? 0) > 20,
+          isOffRoadGlance: Math.abs(payload.biometrics?.headYaw ?? 0) > 25,
+          driverState: payload.biometrics?.driverState || 'NORMAL',
+        },
+        telemetry: {
+          mode: payload.transport?.mode === 'LORA' ? 'LORA_RESCUE' : (payload.transport?.mode === 'WIFI' ? 'WIFI' : 'GSM'),
+          rssi: payload.transport?.wifiRssi ?? payload.transport?.loraRssi ?? -65,
+          snr: payload.transport?.loraSnr ?? 8.5,
+          hopCount: payload.transport?.loraHopCount ?? 0,
+          relayedViaNodeId: payload.transport?.relayedVia,
+          spreadingFactor: 'SF10',
+          timeOnAirMs: 169,
+          packetSequence: 1,
+          bufferedPacketsCount: payload.transport?.bufferedQueueCount ?? 0,
+          pdrEstimate: 98.4,
+          collisionProbability: 0.8,
+        },
+        hardware: {
+          piCpuLoad: payload.hardware?.cpuLoad ?? 25,
+          piTemperature: payload.hardware?.cpuTemp ?? 49.0,
+          powerDrawWatts: payload.hardware?.powerWatts ?? 5.1,
+          batteryVoltage: payload.hardware?.batteryVoltage ?? 12.4,
+          satelliteCount: payload.location?.satelliteCount ?? 11,
+          isLocalBuzzerActive: payload.hardware?.buzzerActive ?? false,
+          lcdMessage: payload.hardware?.lcdMessage ?? 'SYS: LIVE MQTT',
+        },
+        routeProgress: 0.2,
+        routeDirection: 1,
+        history: payload.location?.lat ? [{ lat: payload.location.lat, lng: payload.location.lng }] : [],
+      };
+      this.buses.unshift(newBus);
+      bus = newBus;
+    } else {
+      // Update existing bus
+      bus.lastUpdated = payload.timestamp || Date.now();
+      if (payload.location?.lat != null && payload.location?.lng != null) {
+        bus.location = { lat: payload.location.lat, lng: payload.location.lng };
+        bus.history.push({ lat: payload.location.lat, lng: payload.location.lng });
+        if (bus.history.length > 50) bus.history.shift();
+      }
+      if (payload.location?.speed != null) bus.speed = payload.location.speed;
+      if (payload.location?.heading != null) bus.heading = payload.location.heading;
+      if (payload.biometrics?.driverState) {
+        bus.status = payload.biometrics.driverState;
+      }
+
+      if (payload.biometrics) {
+        bus.biometrics = {
+          ...bus.biometrics,
+          ear: payload.biometrics.ear ?? bus.biometrics.ear,
+          mar: payload.biometrics.mar ?? bus.biometrics.mar,
+          perclos: payload.biometrics.perclos ?? bus.biometrics.perclos,
+          headPitch: payload.biometrics.headPitch ?? bus.biometrics.headPitch,
+          headYaw: payload.biometrics.headYaw ?? bus.biometrics.headYaw,
+          headRoll: payload.biometrics.headRoll ?? bus.biometrics.headRoll,
+          alcoholRawADC: payload.biometrics.alcoholRawADC ?? bus.biometrics.alcoholRawADC,
+          alcoholVoltage: payload.biometrics.alcoholVoltage ?? bus.biometrics.alcoholVoltage,
+          alcoholRiskScore: payload.biometrics.alcoholRiskScore ?? bus.biometrics.alcoholRiskScore,
+          driverState: payload.biometrics.driverState ?? bus.biometrics.driverState,
+          isYawning: (payload.biometrics.mar ?? bus.biometrics.mar) > 0.60,
+          isNodding: (payload.biometrics.headPitch ?? bus.biometrics.headPitch) > 20,
+          isOffRoadGlance: Math.abs(payload.biometrics.headYaw ?? bus.biometrics.headYaw) > 25,
+        };
+      }
+
+      if (payload.hardware) {
+        bus.hardware = {
+          ...bus.hardware,
+          piCpuLoad: payload.hardware.cpuLoad ?? bus.hardware.piCpuLoad,
+          piTemperature: payload.hardware.cpuTemp ?? bus.hardware.piTemperature,
+          powerDrawWatts: payload.hardware.powerWatts ?? bus.hardware.powerDrawWatts,
+          batteryVoltage: payload.hardware.batteryVoltage ?? bus.hardware.batteryVoltage,
+          satelliteCount: payload.location?.satelliteCount ?? bus.hardware.satelliteCount,
+          isLocalBuzzerActive: payload.hardware.buzzerActive ?? bus.hardware.isLocalBuzzerActive,
+          lcdMessage: payload.hardware.lcdMessage ?? bus.hardware.lcdMessage,
+        };
+      }
+
+      if (payload.transport) {
+        bus.telemetry = {
+          ...bus.telemetry,
+          mode: payload.transport.mode === 'LORA' ? 'LORA_RESCUE' : (payload.transport.mode === 'WIFI' ? 'WIFI' : 'GSM'),
+          rssi: payload.transport.wifiRssi ?? payload.transport.loraRssi ?? bus.telemetry.rssi,
+          snr: payload.transport.loraSnr ?? bus.telemetry.snr,
+          hopCount: payload.transport.loraHopCount ?? 0,
+          relayedViaNodeId: payload.transport.relayedVia,
+          bufferedPacketsCount: payload.transport.bufferedQueueCount ?? 0,
+        };
+      }
+    }
+
+    // Evaluate alert triggers
+    const driverState = payload.biometrics?.driverState;
+    if (driverState && driverState !== 'NORMAL') {
+      const isCritical = driverState === 'CRITICAL_FATIGUE' || driverState === 'ALCOHOL_ALERT';
+      const alertId = payload.messageId || `ALT-LIVE-${Date.now()}`;
+      
+      if (!this.alerts.some((a) => a.id === alertId)) {
+        const newAlert: AlertIncident = {
+          id: alertId,
+          busId: bus.id,
+          busPlate: bus.plateNumber,
+          driverName: bus.driverName,
+          routeName: bus.routeName,
+          timestamp: payload.timestamp || Date.now(),
+          severity: isCritical ? 'CRITICAL' : 'WARNING',
+          type: driverState === 'ALCOHOL_ALERT'
+            ? 'ALCOHOL_DETECTED'
+            : (driverState === 'CRITICAL_FATIGUE' ? 'FATIGUE_MICROSLEEP' : 'DROWSINESS_EAR'),
+          message: driverState === 'ALCOHOL_ALERT'
+            ? `BAC risk threshold exceeded (${(bus.biometrics.alcoholRiskScore * 100).toFixed(0)}%) on ${bus.plateNumber}`
+            : `Severe fatigue telemetry: EAR ${bus.biometrics.ear.toFixed(3)}, PERCLOS ${bus.biometrics.perclos.toFixed(1)}%`,
+          location: bus.location,
+          acknowledged: false,
+          connectionMode: bus.telemetry.mode,
+          valuesSnapshot: {
+            ear: bus.biometrics.ear,
+            mar: bus.biometrics.mar,
+            perclos: bus.biometrics.perclos,
+            alcoholVolt: bus.biometrics.alcoholVoltage,
+            hopCount: bus.telemetry.hopCount,
+          },
+        };
+
+        this.alerts.unshift(newAlert);
+        if (this.alerts.length > 50) this.alerts.pop();
+
+        if (isCritical) {
+          soundFx.playCriticalAlert();
+        } else {
+          soundFx.playWarning();
+        }
+      }
+    }
+
+    // Real-time re-render
+    if (this.onUpdateCallback) {
+      this.onUpdateCallback([...this.buses], [...this.alerts]);
+    }
+  }
 }
 
 export const simulationEngine = new FleetSimulationEngine();

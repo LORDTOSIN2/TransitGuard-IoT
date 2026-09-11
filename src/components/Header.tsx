@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { SimulationPreset } from '../types/fleet';
 import { soundFx } from '../utils/audio';
 import {
@@ -35,6 +35,8 @@ interface HeaderProps {
   canInstallPwa: boolean;
   onInstallPwa: () => void;
   onOpenCarto: () => void;
+  isMqttConnected?: boolean;
+  liveMqttPackets?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -55,6 +57,8 @@ export const Header: React.FC<HeaderProps> = ({
   canInstallPwa,
   onInstallPwa,
   onOpenCarto,
+  isMqttConnected = false,
+  liveMqttPackets = 0,
 }) => {
   return (
     <header
@@ -84,13 +88,23 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs font-mono">
-            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold ${
-              isDarkMode 
-                ? 'bg-green-500/10 border-green-500/30 text-green-400' 
-                : 'bg-emerald-50 border-emerald-300 text-emerald-700'
+            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold transition-all ${
+              isMqttConnected
+                ? isDarkMode
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-700 shadow-xs'
+                : isDarkMode
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                : 'bg-amber-50 border-amber-300 text-amber-700'
             }`}>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-              <span>MQTT LIVE</span>
+              <span className={`w-1.5 h-1.5 rounded-full ${isMqttConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`}></span>
+              <span>
+                {liveMqttPackets > 0 
+                  ? `MQTT LIVE (${liveMqttPackets} pkts)` 
+                  : isMqttConnected 
+                  ? 'MQTT BROKER LIVE' 
+                  : 'MQTT READY'}
+              </span>
             </div>
             <span className="text-slate-400">•</span>
             <span className={`hidden md:inline font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>

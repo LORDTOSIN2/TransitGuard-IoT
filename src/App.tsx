@@ -40,6 +40,10 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [canInstallPwa, setCanInstallPwa] = useState<boolean>(false);
 
+  // Live MQTT Telemetry Stream State
+  const [isMqttConnected, setIsMqttConnected] = useState<boolean>(false);
+  const [liveMqttPackets, setLiveMqttPackets] = useState<number>(0);
+
   // PWA Service Worker Registration & Install Event
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -83,6 +87,68 @@ export default function App() {
 
     return () => {
       simulationEngine.pause();
+    };
+  }, []);
+
+  // Connect to Live MQTT / Backend Telemetry Stream
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: any = null;
+
+    const connectStream = () => {
+      try {
+        eventSource = new EventSource('/api/stream');
+
+        eventSource.addEventListener('connected', (e: MessageEvent) => {
+          setIsMqttConnected(true);
+          try {
+            const data = JSON.parse(e.data);
+            if (data.totalPacketsReceived != null) {
+              setLiveMqttPackets(data.totalPacketsReceived);
+            }
+          } catch {}
+        });
+
+        eventSource.addEventListener('telemetry', (e: MessageEvent) => {
+          setIsMqttConnected(true);
+          setLiveMqttPackets((prev) => prev + 1);
+          try {
+            const payload = JSON.parse(e.data);
+            simulationEngine.ingestLiveTelemetry(payload);
+          } catch (err) {
+            console.error('Failed to parse telemetry packet:', err);
+          }
+        });
+
+        eventSource.addEventListener('alert', (e: MessageEvent) => {
+          try {
+            const alertData = JSON.parse(e.data);
+            setAlerts((prev) => {
+              if (prev.some((a) => a.id === alertData.id)) return prev;
+              return [alertData, ...prev.slice(0, 49)];
+            });
+          } catch (err) {
+            console.error('Failed to parse incoming alert:', err);
+          }
+        });
+
+        eventSource.onerror = () => {
+          setIsMqttConnected(false);
+          eventSource?.close();
+          // Auto-reconnect after 3s
+          reconnectTimeout = setTimeout(connectStream, 3000);
+        };
+      } catch (err) {
+        console.warn('Could not establish SSE stream:', err);
+        reconnectTimeout = setTimeout(connectStream, 5000);
+      }
+    };
+
+    connectStream();
+
+    return () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (eventSource) eventSource.close();
     };
   }, []);
 
@@ -146,6 +212,8 @@ export default function App() {
         canInstallPwa={canInstallPwa}
         onInstallPwa={handleInstallPwa}
         onOpenCarto={() => setIsCartoOpen(true)}
+        isMqttConnected={isMqttConnected}
+        liveMqttPackets={liveMqttPackets}
       />
 
       {/* Main Operator Dashboard Workspace */}
