@@ -35,8 +35,8 @@ interface HeaderProps {
   canInstallPwa: boolean;
   onInstallPwa: () => void;
   onOpenCarto: () => void;
-  isMqttConnected?: boolean;
-  liveMqttPackets?: number;
+  isLiveConnected?: boolean;
+  liveTelemetryPackets?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -57,8 +57,8 @@ export const Header: React.FC<HeaderProps> = ({
   canInstallPwa,
   onInstallPwa,
   onOpenCarto,
-  isMqttConnected = false,
-  liveMqttPackets = 0,
+  isLiveConnected = false,
+  liveTelemetryPackets = 0,
 }) => {
   return (
     <header
@@ -69,27 +69,27 @@ export const Header: React.FC<HeaderProps> = ({
           : 'bg-white/95 border-slate-200 text-slate-900 backdrop-blur-xl shadow-xs'
       }`}
     >
-      {/* Brand Identity & MQTT Heartbeat */}
+      {/* Brand Identity & Supabase Realtime Heartbeat */}
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-blue-400/40">
+        <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-400/40">
           <Radio className="w-5 h-5 text-white animate-pulse" />
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display font-extrabold text-base sm:text-lg tracking-tight bg-gradient-to-r from-blue-500 via-sky-500 to-cyan-500 bg-clip-text text-transparent">
+            <h1 className="font-display font-extrabold text-base sm:text-lg tracking-tight bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 bg-clip-text text-transparent">
               TransitGuard
             </h1>
             <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-semibold border hidden sm:inline-block ${
               isDarkMode 
-                ? 'bg-blue-500/10 text-blue-300 border-blue-500/30' 
-                : 'bg-blue-50 text-blue-700 border-blue-200'
+                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' 
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
             }`}>
               OPERATOR HUB
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs font-mono">
             <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold transition-all ${
-              isMqttConnected
+              isLiveConnected
                 ? isDarkMode
                   ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
                   : 'bg-emerald-50 border-emerald-300 text-emerald-700 shadow-xs'
@@ -97,18 +97,18 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
                 : 'bg-amber-50 border-amber-300 text-amber-700'
             }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${isMqttConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`}></span>
+              <span className={`w-1.5 h-1.5 rounded-full ${isLiveConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`}></span>
               <span>
-                {liveMqttPackets > 0 
-                  ? `MQTT LIVE (${liveMqttPackets} pkts)` 
-                  : isMqttConnected 
-                  ? 'MQTT BROKER LIVE' 
-                  : 'MQTT READY'}
+                {liveTelemetryPackets > 0 
+                  ? `SUPABASE LIVE (${liveTelemetryPackets} pkts)` 
+                  : isLiveConnected 
+                  ? 'SUPABASE REALTIME LIVE' 
+                  : 'SUPABASE CONNECTING'}
               </span>
             </div>
             <span className="text-slate-400">•</span>
             <span className={`hidden md:inline font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-              Multi-Hub LoRa/GSM Rescue Active
+              Wi-Fi / LoRa Dual-Mode Telemetry
             </span>
           </div>
         </div>

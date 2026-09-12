@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BusVehicle, AlertIncident, SimulationPreset } from './types/fleet';
 import { simulationEngine } from './services/simulationEngine';
+import { supabaseService } from './services/supabaseService';
 import { soundFx } from './utils/audio';
 import { Header } from './components/Header';
 import { FleetStatsBar } from './components/FleetStatsBar';
@@ -40,9 +41,9 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [canInstallPwa, setCanInstallPwa] = useState<boolean>(false);
 
-  // Live MQTT Telemetry Stream State
-  const [isMqttConnected, setIsMqttConnected] = useState<boolean>(false);
-  const [liveMqttPackets, setLiveMqttPackets] = useState<number>(0);
+  // Live Supabase Telemetry Stream State
+  const [isLiveConnected, setIsLiveConnected] = useState<boolean>(false);
+  const [liveTelemetryPackets, setLiveTelemetryPackets] = useState<number>(0);
 
   // PWA Service Worker Registration & Install Event
   useEffect(() => {
@@ -90,65 +91,36 @@ export default function App() {
     };
   }, []);
 
-  // Connect to Live MQTT / Backend Telemetry Stream
+  // Connect to Live Supabase Realtime Telemetry Stream & Load Recent Telemetry
   useEffect(() => {
-    let eventSource: EventSource | null = null;
-    let reconnectTimeout: any = null;
-
-    const connectStream = () => {
-      try {
-        eventSource = new EventSource('/api/stream');
-
-        eventSource.addEventListener('connected', (e: MessageEvent) => {
-          setIsMqttConnected(true);
-          try {
-            const data = JSON.parse(e.data);
-            if (data.totalPacketsReceived != null) {
-              setLiveMqttPackets(data.totalPacketsReceived);
-            }
-          } catch {}
+    // 1. Initial historical telemetry hydration from Supabase
+    supabaseService.fetchRecentTelemetry(40).then((records) => {
+      if (records && records.length > 0) {
+        records.forEach((record) => {
+          simulationEngine.ingestLiveTelemetry(record);
         });
-
-        eventSource.addEventListener('telemetry', (e: MessageEvent) => {
-          setIsMqttConnected(true);
-          setLiveMqttPackets((prev) => prev + 1);
-          try {
-            const payload = JSON.parse(e.data);
-            simulationEngine.ingestLiveTelemetry(payload);
-          } catch (err) {
-            console.error('Failed to parse telemetry packet:', err);
-          }
-        });
-
-        eventSource.addEventListener('alert', (e: MessageEvent) => {
-          try {
-            const alertData = JSON.parse(e.data);
-            setAlerts((prev) => {
-              if (prev.some((a) => a.id === alertData.id)) return prev;
-              return [alertData, ...prev.slice(0, 49)];
-            });
-          } catch (err) {
-            console.error('Failed to parse incoming alert:', err);
-          }
-        });
-
-        eventSource.onerror = () => {
-          setIsMqttConnected(false);
-          eventSource?.close();
-          // Auto-reconnect after 3s
-          reconnectTimeout = setTimeout(connectStream, 3000);
-        };
-      } catch (err) {
-        console.warn('Could not establish SSE stream:', err);
-        reconnectTimeout = setTimeout(connectStream, 5000);
+        setLiveTelemetryPackets(records.length);
       }
-    };
+    });
 
-    connectStream();
+    // 2. Subscribe to live real-time INSERT stream
+    const unsubscribe = supabaseService.subscribeToRealtime(
+      (telemetryPayload) => {
+        setIsLiveConnected(true);
+        setLiveTelemetryPackets((prev) => prev + 1);
+        try {
+          simulationEngine.ingestLiveTelemetry(telemetryPayload);
+        } catch (err) {
+          console.error('[Supabase Realtime] Error ingesting packet:', err);
+        }
+      },
+      (status) => {
+        setIsLiveConnected(status === 'CONNECTED');
+      }
+    );
 
     return () => {
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (eventSource) eventSource.close();
+      unsubscribe();
     };
   }, []);
 
@@ -212,8 +184,8 @@ export default function App() {
         canInstallPwa={canInstallPwa}
         onInstallPwa={handleInstallPwa}
         onOpenCarto={() => setIsCartoOpen(true)}
-        isMqttConnected={isMqttConnected}
-        liveMqttPackets={liveMqttPackets}
+        isLiveConnected={isLiveConnected}
+        liveTelemetryPackets={liveTelemetryPackets}
       />
 
       {/* Main Operator Dashboard Workspace */}
