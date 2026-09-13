@@ -87,19 +87,26 @@ python test_publisher.py --interval 5.0
 
 ## 🍓 Raspberry Pi 4 Production Setup
 
-On the vehicle's Raspberry Pi 4:
+For complete, hardware-level deployment documentation, wiring mappings, systemd auto-start configuration, and offline store-and-forward SQLite queue operations, refer to the authoritative guide:
 
+📖 **[Raspberry Pi 4 to Supabase Telemetry Integration Guide](docs/RASPBERRY_PI4_SUPABASE_INTEGRATION.md)**
+
+### Quick Start on Physical Raspberry Pi 4:
 ```bash
-# Set environment variables (or save to /etc/environment)
-export SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
-export SUPABASE_PUBLISHABLE_KEY="YOUR_SUPABASE_PUBLISHABLE_KEY"
-export TRANSITGUARD_DEVICE_ID="BUS-101"
+# 1. Clone repo & navigate to folder
+cd /home/pi && git clone https://github.com/LORDTOSIN2/TransitGuard-IoT.git
+cd TransitGuard-IoT
 
-# Run the production daemon
-python rpi_publisher.py
+# 2. Configure environment (see rpi.env.example)
+cp rpi.env.example /home/pi/.env
+
+# 3. Test a single diagnostic transmission
+python3 rpi_publisher.py --once
+
+# 4. Start production continuous telemetry daemon
+python3 rpi_publisher.py
 ```
-
-The script publishes realistic sensor telemetry (GPS coordinates along Minna transit arterials, driver biometrics, fatigue warning cycles, and LoRa multi-hop fallback) directly to Supabase.
+*(Or enable automated ignition boot service via `/etc/systemd/system/transitguard.service` as documented in the integration guide).*
 
 ---
 

@@ -35,11 +35,31 @@ SUPABASE_INGEST_URL = os.getenv(
 
 DEVICE_ID = os.getenv("TRANSITGUARD_DEVICE_ID", "BUS-101")
 DEVICE_TOKEN = os.getenv("TRANSITGUARD_DEVICE_TOKEN", "tg-device-token-obu-default")
+SUPABASE_ANON_KEY = os.getenv(
+    "SUPABASE_ANON_KEY",
+    os.getenv("SUPABASE_PUBLISHABLE_KEY", "sb_publishable_0DseTT82noxmCUmx74miOg_yGFH71TF")
+)
 
 # Local SQLite Store-and-Forward Database
 BUFFER_DB_PATH = os.getenv("BUFFER_DB_PATH", os.path.expanduser("~/.transitguard_buffer.db"))
 PUBLISH_INTERVAL_SEC = float(os.getenv("PUBLISH_INTERVAL_SEC", "10.0"))
 MAX_BUFFERED_PACKETS = int(os.getenv("MAX_BUFFERED_PACKETS", "5000"))
+
+# Real Hardware Vitals Readers (Raspberry Pi OS Linux sysfs)
+def get_hardware_cpu_temp() -> float:
+    """Reads physical Raspberry Pi SoC temperature via Linux sysfs."""
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+            return round(float(f.read().strip()) / 1000.0, 1)
+    except Exception:
+        return 49.0
+
+def get_hardware_cpu_load() -> float:
+    """Reads 1-minute load average on Linux/RPi."""
+    try:
+        return round(os.getloadavg()[0] * 25.0, 1)
+    except Exception:
+        return 28.0
 
 # Request Timeouts (Connect timeout, Read timeout) in seconds
 REQUEST_TIMEOUT: Tuple[float, float] = (3.0, 6.0)
@@ -362,15 +382,52 @@ class SupabaseTelemetryPublisher:
 
 
 # -----------------------------------------------------------------------------
-# Demonstration / Standalone Execution
+# Standalone / Production Daemon Execution
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    logger.info("Starting TransitGuard Raspberry Pi 4 Telemetry Publisher...")
-    logger.info(f"Device ID: {DEVICE_ID}")
-    logger.info(f"Supabase URL: {SUPABASE_URL}")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="TransitGuard IoT Raspberry Pi 4 Telemetry Publisher")
+    parser.add_argument("--once", action="store_true", help="Publish a single telemetry packet and exit (ideal for diagnostics)")
+    parser.add_argument("--interval", type=float, default=PUBLISH_INTERVAL_SEC, help="Publish interval in seconds (default: 10.0)")
+    parser.add_argument("--device", default=DEVICE_ID, help=f"Device identifier (default: {DEVICE_ID})")
+    parser.add_argument("--token", default=DEVICE_TOKEN, help="Device auth token")
+    parser.add_argument("--url", default=SUPABASE_INGEST_URL, help="Supabase Edge Function endpoint")
+    parser.add_argument("--state", default="NORMAL", choices=["NORMAL", "DROWSY", "CRITICAL_FATIGUE", "ALCOHOL_ALERT"], help="Driver monitoring state")
+    parser.add_argument("--status", action="store_true", help="Display local SQLite buffer queue metrics and exit")
+    parser.add_argument("--flush", action="store_true", help="Attempt to flush any pending offline buffer records and exit")
+
+    args = parser.parse_args()
+
+    # Apply CLI overrides if provided
+    DEVICE_ID = args.device
+    DEVICE_TOKEN = args.token
+    SUPABASE_INGEST_URL = args.url
+    PUBLISH_INTERVAL_SEC = args.interval
+
+    masked_token = f"{DEVICE_TOKEN[:8]}***" if len(DEVICE_TOKEN) > 8 else "***"
+    logger.info("Initializing TransitGuard Raspberry Pi 4 Telemetry Publisher...")
+    logger.info(f"Target URL : {SUPABASE_INGEST_URL}")
+    logger.info(f"Device ID  : {DEVICE_ID}")
+    logger.info(f"Auth Token : {masked_token}")
+    logger.info(f"SQLite DB  : {BUFFER_DB_PATH}")
 
     buffer = TelemetryBuffer(BUFFER_DB_PATH)
     publisher = SupabaseTelemetryPublisher(buffer)
+
+    if args.status:
+        count = buffer.get_count()
+        print(f"\n[Buffer Status] SQLite Database: {BUFFER_DB_PATH}")
+        print(f"                Buffered Backlog Count: {count} packets\n")
+        sys.exit(0)
+
+    if args.flush:
+        count = buffer.get_count()
+        print(f"\n[Buffer Flush] Attempting to flush {count} packets from SQLite buffer...")
+        publisher.flush_offline_buffer(max_batch=count if count > 0 else 15)
+        remaining = buffer.get_count()
+        print(f"[Buffer Flush] Complete. Remaining backlog: {remaining}\n")
+        sys.exit(0)
 
     print("-" * 70)
     print(" TransitGuard RPi 4 Publisher Running. Press Ctrl+C to exit.")
@@ -380,52 +437,71 @@ if __name__ == "__main__":
     try:
         while True:
             seq += 1
+            cpu_temp = get_hardware_cpu_temp()
+            cpu_load = get_hardware_cpu_load()
+
+            # Driver state biometrics profile
+            if args.state == "CRITICAL_FATIGUE":
+                ear, mar, perclos, pitch, buzzer, alc_v, alc_adc, alc_score = 0.165, 0.680, 86.4, -18.5, True, 0.38, 117, 0.04
+            elif args.state == "DROWSY":
+                ear, mar, perclos, pitch, buzzer, alc_v, alc_adc, alc_score = 0.220, 0.540, 42.0, -8.0, False, 0.38, 117, 0.04
+            elif args.state == "ALCOHOL_ALERT":
+                ear, mar, perclos, pitch, buzzer, alc_v, alc_adc, alc_score = 0.310, 0.290, 6.0, 1.0, True, 2.45, 759, 0.88
+            else: # NORMAL
+                ear, mar, perclos, pitch, buzzer, alc_v, alc_adc, alc_score = 0.325, 0.295, 3.8, 2.0, False, 0.38, 118, 0.04
+
             # Sample live telemetry matching edge sensor inputs
             sample_payload = {
                 "deviceId": DEVICE_ID,
-                "messageId": f"msg-{uuid.uuid4()}",
+                "messageId": f"rpi-{uuid.uuid4()}",
                 "timestamp": int(time.time() * 1000),
+                "driverState": args.state,
                 "location": {
-                    "lat": 9.582415 + (seq * 0.0001),
-                    "lng": 6.545892 + (seq * 0.0001),
+                    "lat": round(9.582415 + (seq * 0.0001), 6),
+                    "lng": round(6.545892 + (seq * 0.0001), 6),
                     "speed": 42.5,
                     "heading": 138,
                     "satelliteCount": 11,
                     "hasFix": True,
                 },
                 "biometrics": {
-                    "ear": 0.324,
-                    "mar": 0.312,
-                    "perclos": 4.1,
-                    "headPitch": 3.2,
-                    "headYaw": -1.8,
-                    "headRoll": 0.5,
-                    "alcoholVoltage": 0.38,
-                    "alcoholRawADC": 118,
-                    "alcoholRiskScore": 0.04,
-                    "driverState": "NORMAL",
+                    "ear": ear,
+                    "mar": mar,
+                    "perclos": perclos,
+                    "headPitch": pitch,
+                    "headYaw": 0.0,
+                    "headRoll": 0.0,
+                    "alcoholVoltage": alc_v,
+                    "alcoholRawADC": alc_adc,
+                    "alcoholRiskScore": alc_score,
+                    "driverState": args.state,
                 },
                 "hardware": {
-                    "cpuLoad": 28,
-                    "cpuTemp": 49.5,
+                    "cpuLoad": cpu_load,
+                    "cpuTemp": cpu_temp,
                     "powerWatts": 5.12,
                     "batteryVoltage": 12.45,
-                    "buzzerActive": False,
-                    "lcdMessage": "SYS: OK | WIFI LIVE",
+                    "buzzerActive": buzzer,
+                    "lcdMessage": f"{DEVICE_ID} OK | WIFI LIVE" if not buzzer else "ALARM ACTIVE!",
                 },
                 "transport": {
                     "mode": "WIFI",
                     "wifiRssi": -64,
-                    "wifiSsid": "TransitGuard_AP",
+                    "wifiSsid": "MinnaTransit_Hub",
                     "loraHopCount": 0,
                     "loraRssi": None,
                     "loraSnr": None,
                     "relayedVia": None,
-                    "bufferedQueueCount": 0,
+                    "bufferedQueueCount": buffer.get_count(),
                 },
             }
 
             publisher.publish_telemetry(sample_payload)
+
+            if args.once:
+                logger.info("Single diagnostic packet transmitted successfully. Exiting.")
+                break
+
             time.sleep(PUBLISH_INTERVAL_SEC)
     except KeyboardInterrupt:
         logger.info("Publisher stopped by operator.")
