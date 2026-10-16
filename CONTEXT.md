@@ -123,6 +123,9 @@ the Pi's `/etc/transitguard.env` and in Supabase secrets, never in either repo.
   `TransitGuard_Pi/docs/measurements/stability_report.md` — a three-run connection-stability
   study of the Pi → ingest → Postgres → dashboard path (612 scheduled, 99.66 % delivery vs
   attempted, plus a 49 % alert-message loss defect found and fixed).
+  `TransitGuard_Pi/docs/measurements/connection_loss_report.md` — the companion
+  **connection-loss & recovery** study: three 5-minute ingest outages, **3 / 3 recovered,
+  0 messages dropped, 93 / 93 outage-scheduled messages stored** in `public.telemetry`.
 
 ## Never commit
 
