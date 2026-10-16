@@ -275,6 +275,8 @@ export const MapView: React.FC<MapViewProps> = ({
       const isCritical = bus.status === 'CRITICAL_FATIGUE' || bus.status === 'ALCOHOL_ALERT';
       const isDrowsy = bus.status === 'DROWSY' || bus.status === 'CAUTION';
       const isRescued = bus.telemetry.mode === 'LORA_RESCUE';
+      const isLive = bus.source === 'LIVE';
+      const noFace = bus.biometrics.isFacePresent === false;
 
       // Status color
       let statusColor = '#10b981'; // Emerald
@@ -375,9 +377,13 @@ export const MapView: React.FC<MapViewProps> = ({
               </span>
             </div>
             <div class="flex justify-between">
+              <span class="text-slate-400">Source:</span>
+              <span class="${isLive ? 'text-emerald-400 font-bold' : 'text-slate-400'}">${isLive ? 'LIVE DEVICE' : 'SIMULATED'}</span>
+            </div>
+            <div class="flex justify-between">
               <span class="text-slate-400">EAR / PERCLOS:</span>
               <span class="${bus.biometrics.perclos > 15 ? 'text-rose-400 font-bold' : 'text-slate-200'}">
-                ${bus.biometrics.ear} / ${bus.biometrics.perclos}%
+                ${noFace ? '-- (no face)' : `${bus.biometrics.ear} / ${bus.biometrics.perclos}%`}
               </span>
             </div>
           </div>

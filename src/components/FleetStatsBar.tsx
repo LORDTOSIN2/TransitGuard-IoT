@@ -27,6 +27,8 @@ export const FleetStatsBar: React.FC<FleetStatsBarProps> = ({
   const cautionCount = buses.filter((b) => b.status === 'CAUTION' || b.status === 'DROWSY').length;
   const criticalCount = buses.filter((b) => b.status === 'CRITICAL_FATIGUE' || b.status === 'ALCOHOL_ALERT').length;
   const loraRescueCount = buses.filter((b) => b.telemetry.mode === 'LORA_RESCUE').length;
+  const liveCount = buses.filter((b) => b.source === 'LIVE').length;
+  const simCount = buses.filter((b) => b.source === 'SIM').length;
 
   const avgPdr = totalBuses > 0
     ? (buses.reduce((acc, b) => acc + b.telemetry.pdrEstimate, 0) / totalBuses).toFixed(1)
@@ -60,7 +62,11 @@ export const FleetStatsBar: React.FC<FleetStatsBarProps> = ({
         <div className={`text-lg font-extrabold mt-1 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
           {totalBuses} Nodes
         </div>
-        <div className="text-[9px] text-slate-500 font-medium">RPi4 Vehicle OBUs</div>
+        <div className="text-[9px] text-slate-500 font-medium">
+          <span className={liveCount > 0 ? isDarkMode ? 'text-emerald-400' : 'text-emerald-700 font-bold' : ''}>{liveCount} live</span>
+          {' · '}
+          {simCount} sim
+        </div>
       </div>
 
       {/* 2. Normal Status */}

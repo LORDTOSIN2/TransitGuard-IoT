@@ -14,7 +14,8 @@ import {
   DownloadCloud,
   Volume2,
   VolumeX,
-  Database
+  Database,
+  Power
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -36,7 +37,14 @@ interface HeaderProps {
   onInstallPwa: () => void;
   onOpenCarto: () => void;
   isLiveConnected?: boolean;
-  liveTelemetryPackets?: number;
+  /** Count of realtime INSERT packets received this session (not the fetch limit). */
+  livePacketCount?: number;
+  /** Count of historical rows hydrated from Supabase on load. */
+  hydratedCount?: number;
+  /** Number of real devices currently reporting. */
+  liveBusCount?: number;
+  simulationEnabled?: boolean;
+  onToggleSimulation?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -58,7 +66,11 @@ export const Header: React.FC<HeaderProps> = ({
   onInstallPwa,
   onOpenCarto,
   isLiveConnected = false,
-  liveTelemetryPackets = 0,
+  livePacketCount = 0,
+  hydratedCount = 0,
+  liveBusCount = 0,
+  simulationEnabled = true,
+  onToggleSimulation,
 }) => {
   return (
     <header
@@ -87,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
               OPERATOR HUB
             </span>
           </div>
-          <div className="flex items-center gap-2 text-xs font-mono">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
             <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold transition-all ${
               isLiveConnected
                 ? isDarkMode
@@ -98,17 +110,13 @@ export const Header: React.FC<HeaderProps> = ({
                 : 'bg-amber-50 border-amber-300 text-amber-700'
             }`}>
               <span className={`w-1.5 h-1.5 rounded-full ${isLiveConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`}></span>
-              <span>
-                {liveTelemetryPackets > 0 
-                  ? `SUPABASE LIVE (${liveTelemetryPackets} pkts)` 
-                  : isLiveConnected 
-                  ? 'SUPABASE REALTIME LIVE' 
-                  : 'SUPABASE CONNECTING'}
-              </span>
+              <span>{isLiveConnected ? 'SUPABASE LIVE' : 'SUPABASE CONNECTING'}</span>
             </div>
-            <span className="text-slate-400">•</span>
-            <span className={`hidden md:inline font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-              Wi-Fi / LoRa Dual-Mode Telemetry
+            {/* Honest provenance counts: real devices streaming vs. historical rows replayed */}
+            <span className={`hidden sm:inline font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+              <strong className={isDarkMode ? 'text-emerald-300' : 'text-emerald-700'}>{liveBusCount}</strong> device{liveBusCount === 1 ? '' : 's'} live
+              {livePacketCount > 0 ? <> · <strong className={isDarkMode ? 'text-emerald-300' : 'text-emerald-700'}>+{livePacketCount}</strong> rt</> : null}
+              {hydratedCount > 0 ? <> · {hydratedCount} hydrated</> : null}
             </span>
           </div>
         </div>
@@ -118,14 +126,41 @@ export const Header: React.FC<HeaderProps> = ({
       <div className={`flex items-center gap-1.5 p-1 rounded-xl border font-mono text-xs shadow-xs ${
         isDarkMode ? 'bg-white/[0.04] border-white/10 backdrop-blur-md' : 'bg-slate-100/90 border-slate-200'
       }`}>
-        {/* Play/Pause Button */}
+        {/* Simulation engine gate — real telemetry always wins over the mock fleet */}
+        <button
+          id="toggle-sim-engine-btn"
+          onClick={() => {
+            soundFx.playClick();
+            onToggleSimulation?.();
+          }}
+          title={simulationEnabled
+            ? 'Simulation engine ON — mock vehicles are shown alongside any real devices'
+            : 'Simulation engine OFF — only real reporting devices are shown'}
+          className={`py-1.5 px-2.5 rounded-lg font-bold flex items-center gap-1.5 transition-all border ${
+            simulationEnabled
+              ? isDarkMode
+                ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+                : 'bg-cyan-50 border-cyan-300 text-cyan-800'
+              : isDarkMode
+              ? 'bg-white/5 border-white/10 text-slate-400'
+              : 'bg-white border-slate-200 text-slate-500'
+          }`}
+        >
+          <Power className="w-3.5 h-3.5" />
+          <span>SIM {simulationEnabled ? 'ON' : 'OFF'}</span>
+        </button>
+
+        {/* Play/Pause Button (only meaningful while the simulator is on) */}
         <button
           id="toggle-simulation-btn"
+          disabled={!simulationEnabled}
           onClick={() => {
             soundFx.playClick();
             onTogglePlay();
           }}
           className={`py-1.5 px-3 rounded-lg font-bold flex items-center gap-1.5 transition-all ${
+            !simulationEnabled ? 'opacity-40 cursor-not-allowed' : ''
+          } ${
             isRunning
               ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-sm'
               : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm'
@@ -140,11 +175,14 @@ export const Header: React.FC<HeaderProps> = ({
           {[1, 2, 5].map((speed) => (
             <button
               key={speed}
+              disabled={!simulationEnabled}
               onClick={() => {
                 soundFx.playClick();
                 onSetSpeed(speed);
               }}
               className={`px-2 py-1 rounded text-[11px] font-bold transition-colors ${
+                !simulationEnabled ? 'opacity-40 cursor-not-allowed' : ''
+              } ${
                 speedMultiplier === speed
                   ? 'bg-blue-600 text-white shadow-xs'
                   : isDarkMode

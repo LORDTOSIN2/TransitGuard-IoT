@@ -42,6 +42,9 @@ export const BusDetailPanel: React.FC<BusDetailPanelProps> = ({ bus, onClose, is
   const isCritical = bus.status === 'CRITICAL_FATIGUE' || bus.status === 'ALCOHOL_ALERT';
   const isDrowsy = bus.status === 'DROWSY' || bus.status === 'CAUTION';
   const isRescued = bus.telemetry.mode === 'LORA_RESCUE';
+  const isLive = bus.source === 'LIVE';
+  const isStale = isLive && Date.now() - bus.lastUpdated > 30000;
+  const noFace = bus.biometrics.isFacePresent === false;
 
   const sfInfo = SF_AIRTIME_MAP[bus.telemetry.spreadingFactor];
 
@@ -105,6 +108,14 @@ export const BusDetailPanel: React.FC<BusDetailPanelProps> = ({ bus, onClose, is
                 'bg-green-500/20 text-green-300 border-green-500/40'
               }`}>
                 {bus.status.replace('_', ' ')}
+              </span>
+              {/* Provenance: never let a simulator be mistaken for a live vehicle */}
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border ${
+                isStale ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : isLive ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+              }`}>
+                {isStale ? 'STALE' : isLive ? 'LIVE DEVICE' : 'SIMULATED'}
               </span>
             </div>
             <div className="text-xs text-slate-400 font-mono mt-0.5">
@@ -277,7 +288,7 @@ export const BusDetailPanel: React.FC<BusDetailPanelProps> = ({ bus, onClose, is
                 <div className="bg-black/70 px-2 py-1 rounded border border-white/10">
                   <span className="text-slate-400">EAR: </span>
                   <span className={`font-bold ${bus.biometrics.ear < 0.20 ? 'text-red-400' : 'text-cyan-300'}`}>
-                    {bus.biometrics.ear.toFixed(3)}
+                    {noFace ? '--' : bus.biometrics.ear.toFixed(3)}
                   </span>
                   <span className="text-slate-500 text-[9px] ml-1">(Thresh: 0.25)</span>
                 </div>
@@ -285,7 +296,7 @@ export const BusDetailPanel: React.FC<BusDetailPanelProps> = ({ bus, onClose, is
                 <div className="bg-black/70 px-2 py-1 rounded border border-white/10">
                   <span className="text-slate-400">PERCLOS: </span>
                   <span className={`font-bold ${bus.biometrics.perclos > 15 ? 'text-red-400' : 'text-green-300'}`}>
-                    {bus.biometrics.perclos}%
+                    {noFace ? '--' : `${bus.biometrics.perclos}%`}
                   </span>
                   <span className="text-slate-500 text-[9px] ml-1">(Crit: &gt;15%)</span>
                 </div>
@@ -309,10 +320,10 @@ export const BusDetailPanel: React.FC<BusDetailPanelProps> = ({ bus, onClose, is
                   <span className={`text-xl font-mono font-bold ${
                     bus.biometrics.ear < 0.20 ? 'text-red-400' : bus.biometrics.ear < 0.25 ? 'text-yellow-400' : 'text-cyan-300'
                   }`}>
-                    {bus.biometrics.ear.toFixed(3)}
+                    {noFace ? '--' : bus.biometrics.ear.toFixed(3)}
                   </span>
                   <span className="text-xs text-slate-400 font-mono">
-                    {bus.biometrics.ear < 0.20 ? 'Closed' : bus.biometrics.ear < 0.25 ? 'Drooping' : 'Open'}
+                    {noFace ? 'No face detected' : bus.biometrics.ear < 0.20 ? 'Closed' : bus.biometrics.ear < 0.25 ? 'Drooping' : 'Open'}
                   </span>
                 </div>
                 {/* Progress bar */}
@@ -341,10 +352,10 @@ export const BusDetailPanel: React.FC<BusDetailPanelProps> = ({ bus, onClose, is
                   <span className={`text-xl font-mono font-bold ${
                     bus.biometrics.perclos > 15 ? 'text-red-400' : bus.biometrics.perclos > 10 ? 'text-yellow-400' : 'text-green-400'
                   }`}>
-                    {bus.biometrics.perclos.toFixed(1)}%
+                    {noFace ? '--' : `${bus.biometrics.perclos.toFixed(1)}%`}
                   </span>
                   <span className="text-xs text-slate-400 font-mono">
-                    {bus.biometrics.perclos > 15 ? 'Critical' : bus.biometrics.perclos > 10 ? 'Caution' : 'Normal'}
+                    {noFace ? 'No face detected' : bus.biometrics.perclos > 15 ? 'Critical' : bus.biometrics.perclos > 10 ? 'Caution' : 'Normal'}
                   </span>
                 </div>
                 {/* Progress bar */}
@@ -371,10 +382,10 @@ export const BusDetailPanel: React.FC<BusDetailPanelProps> = ({ bus, onClose, is
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className={`text-xl font-mono font-bold ${bus.biometrics.mar > 0.65 ? 'text-yellow-400' : 'text-slate-200'}`}>
-                    {bus.biometrics.mar.toFixed(3)}
+                    {noFace ? '--' : bus.biometrics.mar.toFixed(3)}
                   </span>
                   <span className="text-xs font-mono text-slate-400">
-                    {bus.biometrics.isYawning ? 'Yawn Active' : 'Normal'}
+                    {noFace ? 'No face detected' : bus.biometrics.isYawning ? 'Yawn Active' : 'Normal'}
                   </span>
                 </div>
                 <div className="w-full bg-white/10 h-1.5 rounded-full mt-2 overflow-hidden">
@@ -679,6 +690,15 @@ export const BusDetailPanel: React.FC<BusDetailPanelProps> = ({ bus, onClose, is
         {/* ================= TAB 4: DISPATCH & SIMULATION TRIGGERS ================= */}
         {activeTab === 'DISPATCH' && (
           <div className="space-y-4">
+            {isLive && (
+              <div className={`p-3 rounded-xl border text-xs font-mono ${
+                isDarkMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-amber-50 border-amber-300 text-amber-800'
+              }`}>
+                This is a <strong>live device</strong>. Simulated incident injection and remote
+                actuator controls are disabled so the dashboard never fabricates state it did not
+                receive from the vehicle.
+              </div>
+            )}
             {/* Operator Alert Control Buttons */}
             <div className={`p-4 rounded-xl border ${
               isDarkMode ? 'bg-white/[0.04] border-white/10 backdrop-blur-md' : 'bg-slate-50 border-slate-200'
@@ -691,7 +711,7 @@ export const BusDetailPanel: React.FC<BusDetailPanelProps> = ({ bus, onClose, is
                 Manually trigger realistic driver biometrics or radio failover to test dashboard reaction.
               </p>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className={`grid grid-cols-2 gap-2.5 ${isLive ? 'pointer-events-none opacity-40' : ''}`}>
                 <button
                   id="trigger-microsleep-btn"
                   onClick={handleTriggerMicrosleep}
@@ -739,7 +759,7 @@ export const BusDetailPanel: React.FC<BusDetailPanelProps> = ({ bus, onClose, is
                 Remote In-Cabin Interventions
               </h3>
 
-              <div className="space-y-3">
+              <div className={`space-y-3 ${isLive ? 'pointer-events-none opacity-40' : ''}`}>
                 <button
                   id="dispatch-buzzer-btn"
                   onClick={handleDispatchBuzzer}

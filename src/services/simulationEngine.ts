@@ -85,6 +85,7 @@ export class FleetSimulationEngine {
   private alerts: AlertIncident[] = [];
   private activePreset: SimulationPreset = SIMULATION_PRESETS[0];
   private isRunning: boolean = true;
+  private simulationEnabled: boolean = true;
   private timeMultiplier: number = 1.0;
   private intervalId: number | null = null;
   private onUpdateCallback: ((buses: BusVehicle[], alerts: AlertIncident[]) => void) | null = null;
@@ -103,10 +104,16 @@ export class FleetSimulationEngine {
 
   public initPreset(preset: SimulationPreset) {
     this.activePreset = preset;
-    this.buses = [];
+    // Real devices always win: keep every LIVE vehicle and never fabricate over its id.
+    const liveBuses = this.buses.filter((b) => b.source === 'LIVE');
+    this.buses = [...liveBuses];
     const count = preset.busCount;
 
     for (let i = 0; i < count; i++) {
+      if (!this.simulationEnabled) break;
+      const simId = `BUS-${100 + i + 1}`;
+      // Skip ids already claimed by a reporting device.
+      if (this.buses.some((b) => b.id === simId)) continue;
       const route = TRANSIT_ROUTES[i % TRANSIT_ROUTES.length];
       const driver = MOCK_DRIVERS[i % MOCK_DRIVERS.length];
       const progress = (i * (1.0 / count) + 0.05) % 1.0;
@@ -128,6 +135,7 @@ export class FleetSimulationEngine {
         isNodding: false,
         isOffRoadGlance: false,
         driverState: 'NORMAL',
+        isFacePresent: true,
       };
 
       const initialTelemetry: TelemetryLink = {
@@ -154,7 +162,7 @@ export class FleetSimulationEngine {
       };
 
       const bus: BusVehicle = {
-        id: `BUS-${100 + i + 1}`,
+        id: simId,
         plateNumber: `NG-MN-${420 + i + 1}`,
         routeId: route.id,
         routeName: route.name,
@@ -171,6 +179,7 @@ export class FleetSimulationEngine {
         hardware: initialHw,
         routeProgress: progress,
         routeDirection: 1,
+        source: 'SIM',
         history: [location],
       };
 
@@ -178,8 +187,9 @@ export class FleetSimulationEngine {
     }
 
     // Seed a couple of initial incidents to demonstrate alerting
-    if (preset.fatigueRiskLevel === 'HIGH' || preset.fatigueRiskLevel === 'EXTREME') {
-      this.triggerMicrosleep(this.buses[0]?.id || 'BUS-101', false);
+    const firstSimBus = this.buses.find((b) => b.source === 'SIM');
+    if (firstSimBus && (preset.fatigueRiskLevel === 'HIGH' || preset.fatigueRiskLevel === 'EXTREME')) {
+      this.triggerMicrosleep(firstSimBus.id, false);
     }
 
     if (this.onUpdateCallback) {
@@ -227,11 +237,40 @@ export class FleetSimulationEngine {
     return this.activePreset;
   }
 
+  public isSimulationEnabled(): boolean {
+    return this.simulationEnabled;
+  }
+
+  public getLiveBusCount(): number {
+    return this.buses.filter((b) => b.source === 'LIVE').length;
+  }
+
+  /**
+   * Gate the demo fleet behind an explicit toggle. Turning it off drops only simulated
+   * vehicles — every device that has reported stays on the map untouched.
+   */
+  public setSimulationEnabled(enabled: boolean) {
+    if (this.simulationEnabled === enabled) return;
+    this.simulationEnabled = enabled;
+    if (enabled) {
+      this.initPreset(this.activePreset); // rebuild the mock fleet, keeps LIVE buses
+    } else {
+      this.buses = this.buses.filter((b) => b.source === 'LIVE');
+      this.emit();
+    }
+  }
+
+  private emit() {
+    if (this.onUpdateCallback) {
+      this.onUpdateCallback(this.buses, this.alerts);
+    }
+  }
+
   /**
    * Main simulation step (called every second)
    */
   public tick() {
-    if (!this.isRunning) return;
+    if (!this.isRunning || !this.simulationEnabled) return;
     this.frameCounter++;
 
     const now = Date.now();
@@ -247,6 +286,9 @@ export class FleetSimulationEngine {
 
     // Update each bus
     this.buses = this.buses.map((bus) => {
+      // Real devices are never simulated — their state only changes on ingest.
+      if (bus.source === 'LIVE') return bus;
+
       const route = TRANSIT_ROUTES.find((r) => r.id === bus.routeId) || TRANSIT_ROUTES[0];
       
       // Advance route progress
@@ -473,7 +515,8 @@ export class FleetSimulationEngine {
    */
   public triggerMicrosleep(busId: string, playSound = true) {
     const bus = this.buses.find((b) => b.id === busId);
-    if (!bus) return;
+    // Operator/simulation controls must never fabricate state for a live device.
+    if (!bus || bus.source === 'LIVE') return;
 
     bus.status = 'CRITICAL_FATIGUE';
     bus.biometrics.driverState = 'CRITICAL_FATIGUE';
@@ -515,7 +558,8 @@ export class FleetSimulationEngine {
    */
   public triggerAlcoholAlert(busId: string) {
     const bus = this.buses.find((b) => b.id === busId);
-    if (!bus) return;
+    // Operator/simulation controls must never fabricate state for a live device.
+    if (!bus || bus.source === 'LIVE') return;
 
     bus.status = 'ALCOHOL_ALERT';
     bus.biometrics.driverState = 'ALCOHOL_ALERT';
@@ -556,7 +600,8 @@ export class FleetSimulationEngine {
    */
   public triggerYawn(busId: string) {
     const bus = this.buses.find((b) => b.id === busId);
-    if (!bus) return;
+    // Operator/simulation controls must never fabricate state for a live device.
+    if (!bus || bus.source === 'LIVE') return;
 
     bus.biometrics.mar = 0.78;
     bus.biometrics.isYawning = true;
@@ -606,7 +651,8 @@ export class FleetSimulationEngine {
    */
   public resetDriverState(busId: string) {
     const bus = this.buses.find((b) => b.id === busId);
-    if (!bus) return;
+    // Operator/simulation controls must never fabricate state for a live device.
+    if (!bus || bus.source === 'LIVE') return;
 
     bus.status = 'NORMAL';
     bus.biometrics.driverState = 'NORMAL';
@@ -633,7 +679,8 @@ export class FleetSimulationEngine {
    */
   public dispatchInCabinBuzzer(busId: string) {
     const bus = this.buses.find((b) => b.id === busId);
-    if (!bus) return;
+    // Operator/simulation controls must never fabricate state for a live device.
+    if (!bus || bus.source === 'LIVE') return;
 
     bus.hardware.isLocalBuzzerActive = true;
     bus.hardware.lcdMessage = 'HQ DISPATCH ALERT';
@@ -659,7 +706,8 @@ export class FleetSimulationEngine {
    */
   public sendLcdMessage(busId: string, message: string) {
     const bus = this.buses.find((b) => b.id === busId);
-    if (!bus) return;
+    // Operator/simulation controls must never fabricate state for a live device.
+    if (!bus || bus.source === 'LIVE') return;
     bus.hardware.lcdMessage = message.slice(0, 16).toUpperCase();
     soundFx.playClick();
     if (this.onUpdateCallback) {
@@ -672,7 +720,8 @@ export class FleetSimulationEngine {
    */
   public setSpreadingFactor(busId: string, sf: LoRaSpreadingFactor) {
     const bus = this.buses.find((b) => b.id === busId);
-    if (!bus) return;
+    // Operator/simulation controls must never fabricate state for a live device.
+    if (!bus || bus.source === 'LIVE') return;
     const sfInfo = SF_AIRTIME_MAP[sf];
     bus.telemetry.spreadingFactor = sf;
     bus.telemetry.timeOnAirMs = sfInfo.airtimeMs;
@@ -699,7 +748,23 @@ export class FleetSimulationEngine {
   public ingestLiveTelemetry(payload: any) {
     if (!payload || !payload.deviceId) return;
 
-    let bus = this.buses.find((b) => b.id === payload.deviceId);
+    // Does this payload carry real facial biometrics? The Pi publishes null when no face
+    // is in frame, so a live vehicle with no face must not display fabricated numbers.
+    const hasFace =
+      payload.biometrics?.ear != null ||
+      payload.biometrics?.mar != null ||
+      payload.biometrics?.perclos != null;
+
+    const existingIndex = this.buses.findIndex((b) => b.id === payload.deviceId);
+    let bus = existingIndex >= 0 ? this.buses[existingIndex] : undefined;
+
+    // A real device outranks the simulator: if it claims an id the mock fleet owns, drop
+    // the mock vehicle so no fabricated biometric can survive into the live record.
+    if (bus && bus.source === 'SIM') {
+      this.buses.splice(existingIndex, 1);
+      bus = undefined;
+    }
+
     if (!bus) {
       // Create new bus vehicle representation
       const route = TRANSIT_ROUTES[0];
@@ -733,6 +798,7 @@ export class FleetSimulationEngine {
           isNodding: (payload.biometrics?.headPitch ?? 0) > 20,
           isOffRoadGlance: Math.abs(payload.biometrics?.headYaw ?? 0) > 25,
           driverState: payload.biometrics?.driverState || 'NORMAL',
+          isFacePresent: hasFace,
         },
         telemetry: {
           mode: payload.transport?.mode === 'LORA' ? 'LORA_RESCUE' : (payload.transport?.mode === 'WIFI' ? 'WIFI' : 'GSM'),
@@ -758,12 +824,14 @@ export class FleetSimulationEngine {
         },
         routeProgress: 0.2,
         routeDirection: 1,
+        source: 'LIVE',
         history: payload.location?.lat ? [{ lat: payload.location.lat, lng: payload.location.lng }] : [],
       };
       this.buses.unshift(newBus);
       bus = newBus;
     } else {
-      // Update existing bus
+      // Update existing bus (already a real device)
+      bus.source = 'LIVE';
       bus.lastUpdated = payload.timestamp || Date.now();
       if (payload.location?.lat != null && payload.location?.lng != null) {
         bus.location = { lat: payload.location.lat, lng: payload.location.lng };
@@ -792,6 +860,7 @@ export class FleetSimulationEngine {
           isYawning: (payload.biometrics.mar ?? bus.biometrics.mar) > 0.60,
           isNodding: (payload.biometrics.headPitch ?? bus.biometrics.headPitch) > 20,
           isOffRoadGlance: Math.abs(payload.biometrics.headYaw ?? bus.biometrics.headYaw) > 25,
+          isFacePresent: hasFace,
         };
       }
 

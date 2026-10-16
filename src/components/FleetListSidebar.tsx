@@ -143,6 +143,9 @@ export const FleetListSidebar: React.FC<FleetListSidebarProps> = ({
                 const isCrit = bus.status === 'CRITICAL_FATIGUE' || bus.status === 'ALCOHOL_ALERT';
                 const isDrowsy = bus.status === 'DROWSY' || bus.status === 'CAUTION';
                 const isRescued = bus.telemetry.mode === 'LORA_RESCUE';
+                const isLive = bus.source === 'LIVE';
+                const isStale = isLive && Date.now() - bus.lastUpdated > 30000;
+                const noFace = bus.biometrics.isFacePresent === false;
 
                 return (
                   <div
@@ -176,6 +179,16 @@ export const FleetListSidebar: React.FC<FleetListSidebarProps> = ({
                           {bus.plateNumber}
                         </span>
                         <span className="text-[10px] text-slate-500 font-mono">({bus.id})</span>
+                        {/* Provenance: real device, stale real device, or simulator */}
+                        <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                          isStale
+                            ? isDarkMode ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-800'
+                            : isLive
+                            ? isDarkMode ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-800'
+                            : isDarkMode ? 'bg-white/10 text-slate-400' : 'bg-slate-200 text-slate-500'
+                        }`}>
+                          {isStale ? 'STALE' : isLive ? 'LIVE' : 'SIM'}
+                        </span>
                       </div>
 
                       <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-semibold ${
@@ -205,10 +218,10 @@ export const FleetListSidebar: React.FC<FleetListSidebarProps> = ({
                       isDarkMode ? 'border-white/10 text-slate-400' : 'border-slate-100 text-slate-500'
                     }`}>
                       <span>
-                        EAR: <strong className={bus.biometrics.ear < 0.20 ? 'text-rose-600' : isDarkMode ? 'text-slate-200' : 'text-slate-800 font-bold'}>{bus.biometrics.ear}</strong>
+                        EAR: <strong className={bus.biometrics.ear < 0.20 ? 'text-rose-600' : isDarkMode ? 'text-slate-200' : 'text-slate-800 font-bold'}>{noFace ? '--' : bus.biometrics.ear}</strong>
                       </span>
                       <span>
-                        PERCLOS: <strong className={bus.biometrics.perclos > 15 ? 'text-rose-600' : isDarkMode ? 'text-slate-200' : 'text-slate-800 font-bold'}>{bus.biometrics.perclos}%</strong>
+                        PERCLOS: <strong className={bus.biometrics.perclos > 15 ? 'text-rose-600' : isDarkMode ? 'text-slate-200' : 'text-slate-800 font-bold'}>{noFace ? '--' : `${bus.biometrics.perclos}%`}</strong>
                       </span>
                       <span>
                         MQ-3: <strong className={bus.biometrics.alcoholVoltage > 0.9 ? 'text-rose-600' : isDarkMode ? 'text-slate-200' : 'text-slate-800 font-bold'}>{bus.biometrics.alcoholVoltage}V</strong>

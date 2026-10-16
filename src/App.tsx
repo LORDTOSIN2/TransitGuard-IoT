@@ -43,7 +43,11 @@ export default function App() {
 
   // Live Supabase Telemetry Stream State
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(false);
-  const [liveTelemetryPackets, setLiveTelemetryPackets] = useState<number>(0);
+  const [livePacketCount, setLivePacketCount] = useState<number>(0);
+  const [hydratedCount, setHydratedCount] = useState<number>(0);
+
+  // Simulation provenance: the mock fleet is opt-in and never overwrites real devices.
+  const [simulationEnabled, setSimulationEnabled] = useState<boolean>(simulationEngine.isSimulationEnabled());
 
   // PWA Service Worker Registration & Install Event
   useEffect(() => {
@@ -99,7 +103,7 @@ export default function App() {
         records.forEach((record) => {
           simulationEngine.ingestLiveTelemetry(record);
         });
-        setLiveTelemetryPackets(records.length);
+        setHydratedCount(records.length);
       }
     });
 
@@ -107,7 +111,7 @@ export default function App() {
     const unsubscribe = supabaseService.subscribeToRealtime(
       (telemetryPayload) => {
         setIsLiveConnected(true);
-        setLiveTelemetryPackets((prev) => prev + 1);
+        setLivePacketCount((prev) => prev + 1);
         try {
           simulationEngine.ingestLiveTelemetry(telemetryPayload);
         } catch (err) {
@@ -141,11 +145,21 @@ export default function App() {
     simulationEngine.setSpeedMultiplier(speed);
   };
 
-  // Handle Preset Change
+  // Handle Preset Change — choosing a scenario implies the simulator should be on.
   const handleSelectPreset = (preset: SimulationPreset) => {
-    setActivePreset(preset);
+    simulationEngine.setSimulationEnabled(true);
+    setSimulationEnabled(true);
     simulationEngine.initPreset(preset);
+    setActivePreset(preset);
     setSelectedBusId(null);
+  };
+
+  // Gate the demo fleet behind an explicit toggle. Real devices are never dropped —
+  // only simulated vehicles disappear when the engine is switched off.
+  const handleToggleSimulation = () => {
+    const next = !simulationEnabled;
+    simulationEngine.setSimulationEnabled(next);
+    setSimulationEnabled(next);
   };
 
   // Theme Toggle
@@ -156,6 +170,7 @@ export default function App() {
   // Find selected bus
   const selectedBus = buses.find((b) => b.id === selectedBusId) || null;
   const unacknowledgedAlertsCount = alerts.filter((a) => !a.acknowledged).length;
+  const liveBusCount = buses.filter((b) => b.source === 'LIVE').length;
 
   return (
     <div
@@ -185,7 +200,11 @@ export default function App() {
         onInstallPwa={handleInstallPwa}
         onOpenCarto={() => setIsCartoOpen(true)}
         isLiveConnected={isLiveConnected}
-        liveTelemetryPackets={liveTelemetryPackets}
+        livePacketCount={livePacketCount}
+        hydratedCount={hydratedCount}
+        liveBusCount={liveBusCount}
+        simulationEnabled={simulationEnabled}
+        onToggleSimulation={handleToggleSimulation}
       />
 
       {/* Main Operator Dashboard Workspace */}

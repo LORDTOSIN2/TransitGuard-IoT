@@ -26,6 +26,51 @@
   </head>
   <body class="bg-slate-950 text-slate-100 antialiased selection:bg-cyan-500 selection:text-slate-950">
     <div id="root"></div>
+    <script>
+      // Self-heal against a stale service-worker shell that points at a deleted hashed
+      // bundle (deploy skew → 404 → blank app). If the app has not mounted shortly after
+      // load, unregister every service worker, clear the caches, and reload once.
+      (function () {
+        window.__TG_MOUNTED__ = false;
+
+        function notMounted() {
+          if (window.__TG_MOUNTED__) return false;
+          var root = document.getElementById('root');
+          return !!root && root.childElementCount === 0;
+        }
+
+        function recover() {
+          if (!notMounted()) return;
+          var KEY = 'tg_sw_recovered_at';
+          var last = 0;
+          try { last = parseInt(sessionStorage.getItem(KEY) || '0', 10); } catch (e) {}
+          if (Date.now() - last < 30000) return; // never loop a hard reload
+          try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+
+          var jobs = [];
+          if ('serviceWorker' in navigator) {
+            jobs.push(
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(regs.map(function (r) { return r.unregister(); }));
+              })
+            );
+          }
+          if (window.caches) {
+            jobs.push(
+              caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+              })
+            );
+          }
+          Promise.all(jobs).catch(function () {}).then(function () {
+            window.location.reload();
+          });
+        }
+
+        window.addEventListener('load', function () { setTimeout(recover, 6000); });
+        setTimeout(recover, 9000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
