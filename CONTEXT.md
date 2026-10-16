@@ -63,6 +63,41 @@ select=created_at,driver_state,wifi_rssi,satellite_count,latitude\
   -H "apikey: sb_publishable_0DseTT82noxmCUmx74miOg_yGFH71TF"
 ```
 
+## Live vs simulated data (provenance)
+
+The dashboard ships with an in-browser **simulation engine** (a mock fleet) that is useful
+for demos but must never be mistaken for the real Pi. The rules that enforce that:
+
+* **`BusVehicle.source`** is `'LIVE'` for a vehicle that arrived from Supabase and `'SIM'`
+  for a mock one. The UI renders a **LIVE / SIM / STALE** badge in the fleet roster, the
+  vehicle drawer, the map popup and the fleet KPI bar (`FLEET TOTAL` shows `N live · M sim`).
+* **Real telemetry always wins.** A device that reports an id already used by the mock
+  fleet takes the vehicle over *wholesale* (the mock row is dropped, so no fabricated
+  biometric can survive the merge), and `tick()` skips every `LIVE` vehicle. Operator
+  "simulate incident" buttons and remote actuator controls are disabled for live devices.
+* **A live device with no face in frame** publishes `null` biometrics; the UI shows `--`
+  (`biometrics.isFacePresent === false`) instead of a fabricated EAR/PERCLOS/MAR.
+* **The mock fleet is gated behind the `SIM ON/OFF` toggle** in the header. Switching it off
+  removes only simulated vehicles — real devices stay on the map.
+* The header reports **real devices live**, **realtime inserts** (`+N rt`) and **hydrated
+  rows** separately, replacing the old, misleading `SUPABASE LIVE (N pkts)` (= fetch limit).
+
+## Service worker / deploy-skew recovery
+
+`public/sw.js` fixes the blank-app-on-reload bug seen when a browser held a cached shell
+that referenced a deleted `assets/index-*.js`:
+
+* **Navigations are network-first** — `fetch(request, { cache: 'reload' })`, falling back to
+  the cached shell only when offline. A fresh deploy therefore always loads the current
+  shell, which points at the current hashed bundle.
+* **Same-origin hashed assets** use stale-while-revalidate (immutable filenames).
+* **Supabase REST/Realtime, Edge Functions and cross-origin requests** are never
+  intercepted, so live telemetry is never served from the cache.
+* `CACHE_VERSION` is bumped on caching changes; stale `transitguard-*` caches are purged on
+  `activate`.
+* `index.html` runs a watchdog: if `window.__TG_MOUNTED__` (set in `src/main.tsx`) is still
+  false ~6 s after load, it unregisters the worker, clears the caches and reloads **once**.
+
 ## Device auth
 
 The Pi authenticates to the ingest function with `TRANSITGUARD_DEVICE_TOKEN`, which is
@@ -75,7 +110,10 @@ the Pi's `/etc/transitguard.env` and in Supabase secrets, never in either repo.
 |---|---|
 | `supabase/functions/ingest-telemetry/` | Edge Function (Deno) — auth, validation, upsert, column mapping |
 | `src/services/supabaseService.ts` | Client-side Supabase access (REST + Realtime), payload mapping |
+| `src/services/simulationEngine.ts` | In-browser demo fleet; `ingestLiveTelemetry` merges real payloads and tags them `LIVE` |
 | `src/` | Vite/React dashboard |
+| `public/sw.js` | Service worker — network-first navigations, same-origin asset cache |
+| `index.html` | Shell + `__TG_MOUNTED__` self-heal watchdog |
 | `rpi.env.example` | Template for the Pi's environment file (no real values) |
 
 ## Related
