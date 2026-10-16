@@ -2,6 +2,10 @@
 
 A resilient, low-power IoT fleet tracking and real-time operator dispatch dashboard engineered for public transport monitoring in areas with intermittent cellular coverage.
 
+> **New here, or handing this over?** Read **[CONTEXT.md](CONTEXT.md)** first — repo/orientation
+> notes for this dashboard + Supabase half of the system, and a link to the full system handover
+> in the `TransitGuard_Pi` repo (Pi layout, SSH, Wi-Fi switching, telemetry behaviour).
+
 ---
 
 ## 🌟 Key Architecture & Capabilities
